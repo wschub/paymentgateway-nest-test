@@ -46,8 +46,7 @@ Prisma 6.14.0 pinned (prisma and @prisma/client same exact version), default cli
     `RATE_LIMIT_TTL`, `RATE_LIMIT_MAX`. `.env.example` has the keys with empty values.
 11. **Coverage**: global threshold 80% in Jest config; excluded from measurement and listed in the README:
     `main.ts`, `*.module.ts`, `*.dto.ts`, `prisma/seed.ts`.
-12. **Repository errors**: the Prisma adapter catches data-access failures and returns `err(DataAccessError)`;
-    the HTTP mapper turns it into a generic 500 body.
+12. **Repository errors**: the port methods throw; the Prisma adapter wraps any Prisma failure in DataAccessError (keeping cause); use cases convert only DataAccessError into err(...) and let any other error propagate to the global filter (generic 500).
 
 ## Constitution Check
 

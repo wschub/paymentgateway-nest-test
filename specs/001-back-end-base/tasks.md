@@ -50,12 +50,12 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ### Tests first
 
-- [ ] T016 [P] [US1] Unit tests for `GetProductsUseCase` with an in-memory fake repository: full list, empty list (returns empty array), product with stock 0 still listed, repository failure returns `err`
+- [X] T016 [P] [US1] Unit tests for `GetProductsUseCase` with an in-memory fake repository: full list, empty list (returns empty array), product with stock 0 still listed, repository failure returns `err`
 - [ ] T017 [P] [US1] e2e test `back-end/test/products-list.e2e-spec.ts` using the fake repository override: 200 with expected fields (id, name, description, priceInCents, stock, imageUrl), empty catalog returns `[]`
 
 ### Implementation
 
-- [ ] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
+- [X] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
 - [ ] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
 - [ ] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
 - [ ] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
