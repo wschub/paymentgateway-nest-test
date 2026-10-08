@@ -20,11 +20,24 @@ const config: Config = {
   moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
+    '!src/main.ts',
+    '!src/**/*.module.ts',
+    '!src/**/*.dto.ts',
+    '!src/**/*.spec.ts',
+    '!src/generated/**',
     'libs/**/*.(t|j)s',
     'apps/**/*.(t|j)s',
   ],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
 };
 
 export default config;
