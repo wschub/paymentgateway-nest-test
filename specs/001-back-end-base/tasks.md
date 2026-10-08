@@ -33,9 +33,9 @@ description: "Task list for Back-end Base - Product Catalog API"
 - [ ] T007 Define `back-end/prisma/schema.prisma` for Product, Customer, Transaction, Delivery exactly as in data-model.md (UUID ids, enums, FKs, unique keys, indexes, `*InCents` Int fields) (FR-007, FR-008)
 - [ ] T008 Create the migration with `prisma migrate dev --create-only`, edit the generated SQL to add the CHECK constraints listed in data-model.md, then apply it. Verify manually that inserting `stock = -1` fails and note the check in the README (FR-006)
 - [ ] T009 [P] Create idempotent `back-end/prisma/seed.ts` (upsert with fixed UUIDs, 8 to 10 tech accessories, relative `.webp` image paths); configure the seed command for the installed Prisma version; run it twice to prove idempotency (FR-009, SC-002)
-- [ ] T010 [P] Environment config with startup validation (fail fast on missing variables) in `back-end/src/infrastructure/config/`
-- [ ] T011 [P] `PrismaService` and its module in `back-end/src/infrastructure/persistence/`
-- [ ] T012 [P] Write unit tests, then implement the `Result` type (`ok`, `err`, `map`, `flatMap`, `match`) in `back-end/src/application/result/`
+- [X] T010 [P] Environment config with startup validation (fail fast on missing variables) in `back-end/src/infrastructure/config/`
+- [X] T011 [P] `PrismaService` and its module in `back-end/src/infrastructure/persistence/`
+- [X] T012 [P] Write unit tests, then implement the `Result` type (`ok`, `err`, `map`, `flatMap`, `match`) in `back-end/src/application/result/`
 - [ ] T013 [P] Domain for Product only: `Product` entity, `ProductRepository` port (interface), errors `ProductNotFoundError` and `DataAccessError` in `back-end/src/domain/`
 - [ ] T014 [P] Write unit tests, then implement the error body format `{ statusCode, code, message, path, timestamp }`, the global exception filter (also normalizes framework errors, never leaks internals) and the Result-to-HTTP error mapper in `back-end/src/infrastructure/http/` (FR-011)
 - [ ] T015 `configureApp(app)` in `back-end/src/infrastructure/http/`: Helmet, CORS from `CORS_ORIGINS`, `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), throttling, global filter; used by `main.ts` and by e2e tests (FR-012)

@@ -15,6 +15,7 @@ domain entities, ports, repositories and use cases are implemented for **Product
 in feature 002 when a use case needs them.
 
 ## Technical Context
+Prisma 6.14.0 pinned (prisma and @prisma/client same exact version), default client output in node_modules, provider prisma-client-js. Do not upgrade to Prisma 7.
 
 - **Language/Version**: TypeScript (strict) on Node.js LTS, NestJS
 - **Dependencies to add**: `@nestjs/config`, `@nestjs/swagger`, `@nestjs/throttler`, `helmet`,
