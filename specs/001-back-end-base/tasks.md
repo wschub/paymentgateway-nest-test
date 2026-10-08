@@ -38,7 +38,7 @@ description: "Task list for Back-end Base - Product Catalog API"
 - [X] T012 [P] Write unit tests, then implement the `Result` type (`ok`, `err`, `map`, `flatMap`, `match`) in `back-end/src/application/result/`
 - [X] T013 [P] Domain for Product only: `Product` entity, `ProductRepository` port (interface), errors `ProductNotFoundError` and `DataAccessError` in `back-end/src/domain/`
 - [X] T014 [P] Write unit tests, then implement the error body format `{ statusCode, code, message, path, timestamp }`, the global exception filter (also normalizes framework errors, never leaks internals) and the Result-to-HTTP error mapper in `back-end/src/infrastructure/http/` (FR-011)
-- [ ] T015 `configureApp(app)` in `back-end/src/infrastructure/http/`: Helmet, CORS from `CORS_ORIGINS`, `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), throttling, global filter; used by `main.ts` and by e2e tests (FR-012)
+- [X] T015 `configureApp(app)` in `back-end/src/infrastructure/http/`: Helmet, CORS from `CORS_ORIGINS`, `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), throttling, global filter; used by `main.ts` and by e2e tests (FR-012)
 
 **Checkpoint**: foundation ready
 
