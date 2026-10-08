@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -76,7 +77,7 @@ model Delivery {
   address      String
   city         String
   region       String
-  postalCode   String         @map("postal_code")
+  postalCode   String?        @map("postal_code")
   notes        String?
   assignedAt   DateTime?      @map("assigned_at")
   createdAt    DateTime       @default(now()) @map("created_at")
