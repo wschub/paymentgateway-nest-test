@@ -18,16 +18,11 @@ async function main() {
   for (const product of PRODUCTS) {
     await prisma.product.upsert({
       where: { id: product.id },
-      update: {
-        name: product.name,
-        description: product.description,
-        priceInCents: product.priceInCents,
-        stock: product.stock,
-        imageUrl: product.imageUrl,
-      },
+      update: product,
       create: product,
     });
   }
+  console.log('Seeded');
 }
 
 main()
