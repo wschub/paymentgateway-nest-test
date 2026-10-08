@@ -56,7 +56,7 @@ description: "Task list for Back-end Base - Product Catalog API"
 ### Implementation
 
 - [X] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
-- [ ] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
+- [X] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
 - [ ] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
 - [ ] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
 
@@ -76,7 +76,7 @@ description: "Task list for Back-end Base - Product Catalog API"
 ### Implementation
 
 - [ ] T024 [US2] Implement `GetProductByIdUseCase` in `back-end/src/application/use-cases/`
-- [ ] T025 [US2] Add `findById` to `PrismaProductRepository` (and its unit test)
+- [X] T025 [US2] Add `findById` to `PrismaProductRepository` (and its unit test)
 - [ ] T026 [US2] Add `GET /products/:id` to the controller with `ParseUUIDPipe`; map `ProductNotFoundError` to 404 through the shared mapper
 
 **Checkpoint**: US1 and US2 work independently
