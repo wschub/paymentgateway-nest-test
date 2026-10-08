@@ -7,3 +7,5 @@ coverage/
 !.env.example
 .qodo/
 .DS_Store
+*.log
+back-end/src/generated/

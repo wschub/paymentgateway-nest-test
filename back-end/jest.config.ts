@@ -24,6 +24,7 @@ const config: Config = {
     '!src/**/*.module.ts',
     '!src/**/*.dto.ts',
     '!src/**/*.spec.ts',
+    '!src/generated/**',
     'libs/**/*.(t|j)s',
     'apps/**/*.(t|j)s',
   ],
