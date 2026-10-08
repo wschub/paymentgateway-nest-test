@@ -11,3 +11,5 @@ coverage/
 back-end/src/generated/
 temp.txt
 commands.txt*.tsbuildinfo
+commands.txt
+temp.txt
