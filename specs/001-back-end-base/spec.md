@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-back-end-base`
 
-**Created**: 2025-10-07
+**Created**: 2026-10-07
 
 **Status**: Draft
 
@@ -20,9 +20,10 @@ As a customer, I need to view all available tech-accessory products with their s
 
 **Acceptance Scenarios**:
 
-1. **Given** the database is seeded with products, **When** I call GET /products, **Then** I receive a 200 OK with an array of product objects including id, name, description, price (COP in minor units), stock, imageUrl
+1. **Given** the database is seeded with products, **When** I call GET /products, **Then** I receive a 200 OK with an array of product objects including id, name, description, priceInCents (COP minor units), stock, imageUrl
 2. **Given** the database contains products, **When** I call GET /products, **Then** all returned products have non-negative stock and valid data
 3. **Given** no special filtering, **When** I call GET /products, **Then** I get all seeded products (8-10 items)
+4. **Given** a product has stock 0, **When** I call GET /products, **Then** it is still listed with stock 0
 
 ---
 
@@ -37,8 +38,8 @@ As a customer, I need to view the details of a specific product by its ID so I c
 **Acceptance Scenarios**:
 
 1. **Given** a product exists with id X, **When** I call GET /products/:id with X, **Then** I receive 200 OK with the full product object
-2. **Given** no product exists with id 999999, **When** I call GET /products/:id with 999999, **Then** I receive 404 Not Found with consistent error body
-3. **Given** an invalid/malformed id format, **When** I call GET /products/:id, **Then** I receive 400 Bad Request with consistent error body
+2. **Given** no product exists with a well-formed UUID (for example 00000000-0000-4000-8000-000000000000), **When** I call GET /products/:id with it, **Then** I receive 404 Not Found with consistent error body
+3. **Given** a malformed id (not a UUID, for example 999999 or abc), **When** I call GET /products/:id, **Then** I receive 400 Bad Request with consistent error body
 
 ---
 
@@ -48,11 +49,19 @@ As a developer integrating with the API, I need Swagger documentation so I can u
 
 **Why this priority**: Required by project requirements for API docs; supports testing and integration.
 
-**Independent Test**: Swagger UI is accessible at public path and shows documented /products endpoints.
+**Independent Test**: Swagger UI is accessible at /docs and shows documented /products endpoints.
 
 **Acceptance Scenarios**:
 
-1. **Given** the API is running, **When** I access the Swagger documentation endpoint, **Then** I see the API docs with both product endpoints documented
+1. **Given** the API is running, **When** I open /docs, **Then** I see the API docs with both product endpoints documented
+
+### Edge Cases
+
+- Empty catalog: GET /products returns 200 with an empty array
+- Database unavailable: safe error body with no internal details (5xx), never a stack trace
+- Unknown routes and unsupported methods return the same consistent error body
+- Request from a non-allowed origin is rejected by CORS
+- Too many requests from the same client receive 429 with the consistent error body
 
 ## Requirements *(mandatory)*
 
@@ -65,18 +74,18 @@ As a developer integrating with the API, I need Swagger documentation so I can u
 - **FR-005**: System MUST return 400 Bad Request with consistent error body format for malformed ids
 - **FR-006**: System MUST enforce stock >= 0 constraint at database level
 - **FR-007**: System MUST store money as integers in minor units (COP currency)
-- **FR-008**: System MUST define domain entities: Product (with stock), Customer, Transaction, Delivery per requirements
+- **FR-008**: System MUST define the four entities Product (with stock), Customer, Transaction and Delivery in the database schema. The schema defines all four entities; domain entities, ports and repositories are implemented for Product only in this feature.
 - **FR-009**: System MUST seed database with 8-10 tech-accessory products with WebP image URLs
-- **FR-010**: System MUST provide Swagger API documentation at a public path
+- **FR-010**: System MUST provide Swagger API documentation at the public path /docs (JSON at /docs-json)
 - **FR-011**: System MUST use consistent error response body format across all endpoints
-- **FR-012**: System MUST apply security headers, restricted CORS, input validation, safe error messages
+- **FR-012**: System MUST apply security headers, restricted CORS (allowed origins from configuration), rate limiting, input validation and safe error messages
 
 ### Key Entities *(include if feature involves data)*
 
-- **Product**: Represents a tech-accessory product with id, name, description, price (int, COP minor units), stock (int >= 0), imageUrl (WebP). Has stock tracking.
-- **Customer**: Represents customer data for delivery/billing (full name, email, phone, address fields as needed). Part of domain model.
-- **Transaction**: Represents payment transaction with status enum (PENDING, APPROVED, DECLINED, VOIDED, ERROR), reference, idempotency key, amount, product/customer references.
-- **Delivery**: Represents delivery/shipping information linked to transaction/customer.
+- **Product**: Represents a tech-accessory product with id (UUID), name, description, priceInCents (int, COP minor units), stock (int >= 0), imageUrl (WebP). Has stock tracking.
+- **Customer**: Represents customer contact data (full name, email, phone). Schema only in this feature.
+- **Transaction**: Represents payment transaction with status enum (PENDING, APPROVED, DECLINED, VOIDED, ERROR), reference, idempotency key, amounts, product/customer references. Schema only in this feature.
+- **Delivery**: Represents delivery information (address, city, region, postal code, notes, status) linked to a transaction. Schema only in this feature.
 
 ## Success Criteria *(mandatory)*
 
@@ -89,7 +98,7 @@ As a developer integrating with the API, I need Swagger documentation so I can u
 - **SC-005**: GET /products/:id returns 404 with consistent error body for non-existent id
 - **SC-006**: GET /products/:id returns 400 with consistent error body for malformed id
 - **SC-007**: Unit tests pass with ≥ 80% coverage for backend code
-- **SC-008**: API documentation (Swagger) is accessible at public path
+- **SC-008**: API documentation (Swagger) is accessible at /docs
 
 ## Assumptions
 
@@ -98,4 +107,5 @@ As a developer integrating with the API, I need Swagger documentation so I can u
 - .env.example with empty values provided
 - Hexagonal architecture enforced (domain, application, infrastructure layers)
 - Money stored as integers in minor units (COP)
-- WebP images for products
+- Product ids are UUIDs
+- WebP images for products, served by the front-end (relative paths in the seed)
