@@ -100,7 +100,7 @@ The provider can notify the store about payment events. The store verifies each 
 - **FR-010**: A purchase MUST have a unique reference and an idempotency key, and a status among pending, approved, declined, voided and error.
 - **FR-011**: Customer and delivery data MUST be validated and persisted.
 - **FR-012**: Errors MUST use safe messages and a consistent shape, and secrets MUST never appear in responses or logs.
-- **FR-013** *(optional, lower priority)*: The store SHOULD ingest provider payment events, verify their checksum with the events secret, and ignore duplicate events.
+- **FR-013** *(optional, lower priority)*: The store SHOULD ingest provider payment events, verify their checksum with the events secret, and ignore duplicate events. An event whose checksum cannot be verified MUST be rejected with 400 `INVALID_EVENT_CHECKSUM`, and no state changes.
 - **FR-014**: A purchase whose payment was never started and that is older than a configurable reservation time (default 15 minutes) MUST be voided with reason `RESERVATION_EXPIRED` and its reserved stock MUST be returned. This release is lazy: it runs before reserving stock for a new purchase and when the status of a purchase is read.
 
 ### Key Entities *(include if feature involves data)*
