@@ -22,15 +22,16 @@ pub_stagtest=...
 prv_stagtest=...
 stagtest_events=...
 stagtest_integrity=...
-# optional overrides (defaults shown)
-BASE_FEE_IN_CENTS=300000
-DELIVERY_FEE_IN_CENTS=900000
-PAYMENT_TIMEOUT_MS=10000
-RESERVATION_TTL_SECONDS=900
-PAYMENT_CLAIM_LEASE_SECONDS=120
+# optional overrides (leave empty to use the default; the default is shown as a comment)
+BASE_FEE_IN_CENTS=            # 300000
+DELIVERY_FEE_IN_CENTS=        # 900000
+PAYMENT_TIMEOUT_MS=           # 10000
+RESERVATION_TTL_SECONDS=      # 900
+PAYMENT_CLAIM_LEASE_SECONDS=  # 120
 ```
 
-Values are never committed; `.env.example` lists the names with empty values.
+Values are never committed. `.env.example` keeps **every** value empty and writes any default as a comment
+next to the name (constitution V); the local `.env` above only carries placeholders for the required secrets.
 
 ## Setup
 

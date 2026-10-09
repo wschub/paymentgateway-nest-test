@@ -58,7 +58,7 @@ Creates a `PENDING` purchase, reserves stock, and returns the server-computed am
 ```json
 {
   "id": "f0e1...",
-  "reference": "TXN-1759999999-1234",
+  "reference": "TXN-7K3F9Q2M8XJA4B6C",
   "status": "PENDING",
   "quantity": 1,
   "amounts": {
@@ -140,7 +140,7 @@ that is older than `RESERVATION_TTL_SECONDS` is released lazily on read and repo
 ```json
 {
   "id": "f0e1...",
-  "reference": "TXN-1759999999-1234",
+  "reference": "TXN-7K3F9Q2M8XJA4B6C",
   "status": "APPROVED",
   "quantity": 1,
   "amounts": { "productAmountInCents": 1500000, "baseFeeInCents": 300000, "deliveryFeeInCents": 900000, "totalInCents": 2700000 },
@@ -164,7 +164,7 @@ purchase through the same finalization CAS, and ignores duplicates.
 
 **200 OK** — event accepted or already processed.
 
-**400** — invalid checksum / payload. No state changes on a rejected event.
+**400** `INVALID_EVENT_CHECKSUM` — invalid checksum / payload. No state changes on a rejected event.
 
 ---
 

@@ -85,7 +85,7 @@ POST {base}/transactions        Authorization: Bearer {privateKey}
   "currency": "COP",
   "signature": "<SHA256 hex>",
   "customer_email": "buyer@example.com",
-  "reference": "TXN-1759999999-1234",
+  "reference": "TXN-7K3F9Q2M8XJA4B6C",
   "payment_method": { "type": "CARD", "token": "tok_...", "installments": 1 }
 }
 ```

@@ -9,8 +9,8 @@
 Add the back-end transaction and card-payment capability to the existing hexagonal NestJS service,
 following the constitution and docs/requirements.md. The change introduces a `PaymentGateway` port and a
 `TransactionRepository` port, a provider HTTP adapter built on the platform `fetch` with a hard timeout (no
-new dependency), and four use cases with a typed `Result` (CreateTransaction, PayTransaction, GetTransaction,
-GetCheckoutConfig). Stock is reserved with a conditional atomic update, payment initiation is an atomic,
+new dependency), and five use cases with a typed `Result` (four functional — CreateTransaction, PayTransaction,
+GetTransaction, GetCheckoutConfig — plus the optional webhook PaymentEvents). Stock is reserved with a conditional atomic update, payment initiation is an atomic,
 re-claimable lease that reconciles by reference before creating, abandoned reservations expire lazily, and
 finalization is a compare-and-set that performs its side effects (assign delivery, release stock) exactly
 once. A new Prisma migration adds the non-sensitive card fields to `Transaction`. Provider variables, fee
@@ -53,7 +53,7 @@ webhook); five use cases (four functional + one optional webhook); one migration
 
 | Principle | Gate | Status |
 |-----------|------|--------|
-| I. Source of truth | Feature derives from docs/requirements.md (FR-1..FR-8, §6, D1/D4/D6/D7). | PASS |
+| I. Source of truth | Feature derives from docs/requirements.md (FR-1..FR-8, §6, D1/D4/D6/D7, D9/D10). | PASS |
 | II. Hexagonal (non-negotiable) | `PaymentGateway` and `TransactionRepository` ports in `domain/ports`; HTTP adapter in `infrastructure/payments`; Prisma adapters in `infrastructure/persistence`; controllers hold no logic; use cases import only ports and the `Result` type. | PASS |
 | III. Testing & coverage | Use cases tested with in-memory fakes; adapter with mocked `fetch`; e2e with the fake gateway; no test hits the sandbox; coverage ≥ 80 %. | PASS |
 | IV. Railway Oriented Programming | Every use case returns `Result<T, E>`; business failures (out of stock, not payable, contracts not accepted) are values, not throws. | PASS |
