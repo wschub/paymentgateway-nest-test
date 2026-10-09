@@ -19,12 +19,12 @@
     "test:cov": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
     "test:debug": "node --inspect-brk --experimental-vm-modules -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
-    "prisma:migrate:create": "dotenv -e ../.env -- prisma migrate dev --create-only",
-    "prisma:migrate:dev": "dotenv -e ../.env -- prisma migrate dev",
-    "prisma:migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy",
-    "prisma:generate": "dotenv -e ../.env -- prisma generate",
-    "prisma:studio": "dotenv -e ../.env -- prisma studio",
-    "prisma:seed": "dotenv -e ../.env -- prisma db seed"
+    "prisma:migrate:create": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma migrate dev --create-only",
+    "prisma:migrate:dev": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma migrate dev",
+    "prisma:migrate:deploy": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma migrate deploy",
+    "prisma:generate": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma generate",
+    "prisma:studio": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma studio",
+    "prisma:seed": "node ./node_modules/dotenv-cli/cli.js -e ../.env -- prisma db seed"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

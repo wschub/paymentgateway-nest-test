@@ -122,7 +122,7 @@ Errors then flow to a single global filter:
    open http://localhost:3000/docs
    ```
 
-   The migration scripts read the root `.env` (they run with `dotenv -e ../.env`).
+   The migration scripts read the root `.env` (they run with `dotenv-cli -e ../.env`).
 
 ### Docker Compose (optional, not yet validated)
 
