@@ -53,7 +53,7 @@ A shopper who double-clicks or retries, or two shoppers competing for the last u
 
 1. **Given** the same idempotency key, **When** the shopper creates the purchase twice, **Then** exactly one purchase exists and the same reference and identifier are returned.
 2. **Given** exactly one unit left, **When** two buyers pay at the same time, **Then** exactly one purchase is accepted and the stock never becomes negative.
-3. **Given** a purchase that already reached a final status, **When** a payment is attempted again, **Then** the attempt is rejected as not payable and no second charge occurs.
+3. **Given** a purchase that already reached a final status, **When** a payment is attempted again, **Then** the attempt is rejected as not payable (`TRANSACTION_NOT_PAYABLE`, 409) and no second charge occurs.
 
 ---
 

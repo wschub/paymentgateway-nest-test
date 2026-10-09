@@ -157,11 +157,14 @@ docs/requirements.md. No open NEEDS CLARIFICATION remains.
   - `POST /transactions` → 201 (created), 200 (idempotent replay), 400 (missing/invalid body, missing or
     malformed `Idempotency-Key`), 404 `PRODUCT_NOT_FOUND`, 409 `INSUFFICIENT_STOCK` or
     `IDEMPOTENCY_KEY_REUSED`.
-  - `POST /transactions/:id/payment` → 202 while `PENDING`, 200 when already final, 400 bad body,
-    404 `TRANSACTION_NOT_FOUND`, 409 `TRANSACTION_NOT_PAYABLE`, 422 `CONTRACTS_NOT_ACCEPTED` (validated in the
-    use case, **not** by the DTO) or `INVALID_PAYMENT_TOKEN` (the provider definitively rejected the creation
-    with a 4xx about the token, R6), 502 `PAYMENT_PROVIDER_REJECTED` (any other provider 4xx, with a generic
-    message), 503 `PAYMENT_PROVIDER_UNAVAILABLE` (timeout, network error or provider 5xx).
+  - `POST /transactions/:id/payment` → 202 while `PENDING` (whether already in progress or started now, with the
+    current view and no second charge), 200 only when the provider answered with an already final status at
+    creation time, 400 bad body,
+    404 `TRANSACTION_NOT_FOUND`, 409 `TRANSACTION_NOT_PAYABLE` (the purchase is not `PENDING`), 422
+    `CONTRACTS_NOT_ACCEPTED` (validated in the use case, **not** by the DTO) or `INVALID_PAYMENT_TOKEN` (the provider
+    definitively rejected the creation with a 4xx about the token, R6), 502 `PAYMENT_PROVIDER_REJECTED` (any other
+    provider 4xx, with a generic message), 503 `PAYMENT_PROVIDER_UNAVAILABLE` (timeout, network error or provider
+    5xx).
   - `GET /transactions/:id` → 200, 404.
   - `GET /payments/checkout-config` → 200, 503 if the provider is unavailable.
   - `POST /webhooks/payment-events` (optional) → 200, 400 invalid checksum.
