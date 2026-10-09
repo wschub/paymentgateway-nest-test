@@ -124,6 +124,18 @@ npm run test:e2e      # e2e with the fake gateway (setup-env.ts provides placeho
 npm run test:int      # integration against real PostgreSQL (DB name must end with _test)
 ```
 
+`npm run test:int` reads **`TEST_DATABASE_URL`** (empty in `.env.example`; it never uses `DATABASE_URL`). Before
+running it, create the test database and apply the migrations against that URL:
+
+```bash
+cd back-end
+createdb paymentgateway_test
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run prisma:migrate:deploy
+npm run test:int
+```
+
+The suite aborts if the database name does not end with `_test`.
+
 The sandbox spike (`./scripts/sandbox-spike.sh`) is the only manual check that talks to the provider.
 
 Definition of done: lint clean, type-check clean, coverage ≥ 80 %, no secrets and no provider company name,

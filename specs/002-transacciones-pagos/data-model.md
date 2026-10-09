@@ -94,6 +94,10 @@ PENDING ──expired──▶ VOIDED      (payment never started, past RESERVAT
   and `GetTransaction` so reservation expiry and the payment claim lease are deterministic in tests.
 - **ReferenceGenerator** (`domain/ports/reference-generator.port.ts`): `newReference(): string`; generates the
   unique reference from `crypto` randomness (not only a timestamp), injected into `CreateTransaction`.
+- **TransactionDetails** (read aggregate): composed of the `Transaction` plus its `Customer`, `Delivery` and
+  the product `{ id, name }`; returned by `TransactionRepository.findById` / `.findByIdempotencyKey` so the
+  query/read flows (`GetTransaction`, and the `PayTransaction`/replay lookups) never join across models
+  themselves.
 - **Payment status**: the enum above; the provider status is mapped to it (unknown → `PENDING`, never finalized).
 - **Idempotency key**: 16–64 chars of letters, digits, dash or underscore from the `Idempotency-Key` header; a
   reuse with a different product, quantity or customer email is rejected (R4).
@@ -116,7 +120,8 @@ PENDING ──expired──▶ VOIDED      (payment never started, past RESERVAT
 
 `TransactionRepository` (domain port) exposes business operations, not raw queries:
 
-- `findById(id)`, `findByIdempotencyKey(key)`.
+- `findById(id)`, `findByIdempotencyKey(key)` → `TransactionDetails | null` (the read aggregate: transaction +
+  customer + delivery + product `{ id, name }`).
 - `releaseExpiredReservations(now)` → number of purchases released. One Prisma `$transaction`: CAS
   `PENDING` with `payment_started_at IS NULL` and `created_at < now() - RESERVATION_TTL_SECONDS` → `VOIDED`
   with `failureReason = 'RESERVATION_EXPIRED'`, then release stock; idempotent and safe under concurrency
@@ -141,5 +146,8 @@ PENDING ──expired──▶ VOIDED      (payment never started, past RESERVAT
 
 - `back-end/test/integration/prisma-transaction.repository.int-spec.ts` runs against a **real PostgreSQL**
   database whose name must end with `_test`, using the config `back-end/test/jest-int.json` and the script
-  `npm run test:int`. It is **excluded from `test:cov`**. It covers two concurrent purchases of the last unit,
+  `npm run test:int`. It reads **`TEST_DATABASE_URL`** (empty in `.env.example`; **never `DATABASE_URL`**) and
+  **refuses to run** when the database name does not end with `_test`; setup is `createdb`, then
+  `prisma:migrate:deploy` with that URL. It is **excluded from `test:cov`**. It covers two concurrent purchases
+  of the last unit,
   concurrent finalization exactly once, the payment claim lease under contention, and the new CHECK constraints.

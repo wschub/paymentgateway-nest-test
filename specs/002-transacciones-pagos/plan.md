@@ -29,8 +29,9 @@ fakes, mocked `fetch`, and a fake gateway in e2e) are updated; no automated test
 **Testing**: Jest (unit `*.spec.ts`, e2e `*.e2e-spec.ts` + supertest). Use cases tested with in-memory fakes of
 every port; the adapter with a mocked `fetch`; e2e with the fake gateway. Additionally, a **PostgreSQL
 integration suite** under `back-end/test/integration` (run with `npm run test:int`, config
-`back-end/test/jest-int.json`) covers real transactions/concurrency; its database name must end with `_test`
-and it is **excluded from `test:cov`**. Coverage threshold ≥ 80 %.
+`back-end/test/jest-int.json`) covers real transactions/concurrency; its database name must end with `_test`,
+it reads **`TEST_DATABASE_URL`** (empty in `.env.example`; **never `DATABASE_URL`**) and **refuses to run**
+when the database name does not end with `_test`; it is **excluded from `test:cov`**. Coverage threshold ≥ 80 %.
 
 **Target Platform**: Linux server (Node.js); local macOS development.
 
