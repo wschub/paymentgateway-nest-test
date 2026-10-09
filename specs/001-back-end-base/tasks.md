@@ -31,14 +31,14 @@ description: "Task list for Back-end Base - Product Catalog API"
 ## Phase 2: Foundational (blocks all user stories)
 
 - [ ] T007 Define `back-end/prisma/schema.prisma` for Product, Customer, Transaction, Delivery exactly as in data-model.md (UUID ids, enums, FKs, unique keys, indexes, `*InCents` Int fields) (FR-007, FR-008)
-- [ ] T008 Create the migration with `prisma migrate dev --create-only`, edit the generated SQL to add the CHECK constraints listed in data-model.md, then apply it. Verify manually that inserting `stock = -1` fails and note the check in the README (FR-006)
-- [ ] T009 [P] Create idempotent `back-end/prisma/seed.ts` (upsert with fixed UUIDs, 8 to 10 tech accessories, relative `.webp` image paths); configure the seed command for the installed Prisma version; run it twice to prove idempotency (FR-009, SC-002)
+- [X] T008 Create the migration with `prisma migrate dev --create-only`, edit the generated SQL to add the CHECK constraints listed in data-model.md, then apply it. Verify manually that inserting `stock = -1` fails and note the check in the README (FR-006)
+- [X] T009 [P] Create idempotent `back-end/prisma/seed.ts` (upsert with fixed UUIDs, 8 to 10 tech accessories, relative `.webp` image paths); configure the seed command for the installed Prisma version; run it twice to prove idempotency (FR-009, SC-002)
 - [X] T010 [P] Environment config with startup validation (fail fast on missing variables) in `back-end/src/infrastructure/config/`
 - [X] T011 [P] `PrismaService` and its module in `back-end/src/infrastructure/persistence/`
 - [X] T012 [P] Write unit tests, then implement the `Result` type (`ok`, `err`, `map`, `flatMap`, `match`) in `back-end/src/application/result/`
 - [X] T013 [P] Domain for Product only: `Product` entity, `ProductRepository` port (interface), errors `ProductNotFoundError` and `DataAccessError` in `back-end/src/domain/`
 - [X] T014 [P] Write unit tests, then implement the error body format `{ statusCode, code, message, path, timestamp }`, the global exception filter (also normalizes framework errors, never leaks internals) and the Result-to-HTTP error mapper in `back-end/src/infrastructure/http/` (FR-011)
-- [ ] T015 `configureApp(app)` in `back-end/src/infrastructure/http/`: Helmet, CORS from `CORS_ORIGINS`, `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), throttling, global filter; used by `main.ts` and by e2e tests (FR-012)
+- [X] T015 `configureApp(app)` in `back-end/src/infrastructure/http/`: Helmet, CORS from `CORS_ORIGINS`, `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`), throttling, global filter; used by `main.ts` and by e2e tests (FR-012)
 
 **Checkpoint**: foundation ready
 
@@ -50,15 +50,15 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ### Tests first
 
-- [ ] T016 [P] [US1] Unit tests for `GetProductsUseCase` with an in-memory fake repository: full list, empty list (returns empty array), product with stock 0 still listed, repository failure returns `err`
-- [ ] T017 [P] [US1] e2e test `back-end/test/products-list.e2e-spec.ts` using the fake repository override: 200 with expected fields (id, name, description, priceInCents, stock, imageUrl), empty catalog returns `[]`
+- [X] T016 [P] [US1] Unit tests for `GetProductsUseCase` with an in-memory fake repository: full list, empty list (returns empty array), product with stock 0 still listed, repository failure returns `err`
+- [X] T017 [P] [US1] e2e test `back-end/test/products-list.e2e-spec.ts` using the fake repository override: 200 with expected fields (id, name, description, priceInCents, stock, imageUrl), empty catalog returns `[]`
 
 ### Implementation
 
-- [ ] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
-- [ ] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
-- [ ] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
-- [ ] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
+- [X] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
+- [X] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
+- [X] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
+- [X] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
 
 **Checkpoint**: US1 works on its own
 
@@ -70,14 +70,14 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ### Tests first
 
-- [ ] T022 [P] [US2] Unit tests for `GetProductByIdUseCase` with the fake repository: found, not found (`err(ProductNotFoundError)`), repository failure
-- [ ] T023 [P] [US2] e2e tests `back-end/test/product-detail.e2e-spec.ts`: 200 with full object, 404 with consistent error body, 400 for a non-UUID id with the same body shape (FR-002 to FR-005)
+- [X] T022 [P] [US2] Unit tests for `GetProductByIdUseCase` with the fake repository: found, not found (`err(ProductNotFoundError)`), repository failure
+- [X] T023 [P] [US2] e2e tests `back-end/test/product-detail.e2e-spec.ts`: 200 with full object, 404 with consistent error body, 400 for a non-UUID id with the same body shape (FR-002 to FR-005)
 
 ### Implementation
 
-- [ ] T024 [US2] Implement `GetProductByIdUseCase` in `back-end/src/application/use-cases/`
-- [ ] T025 [US2] Add `findById` to `PrismaProductRepository` (and its unit test)
-- [ ] T026 [US2] Add `GET /products/:id` to the controller with `ParseUUIDPipe`; map `ProductNotFoundError` to 404 through the shared mapper
+- [X] T024 [US2] Implement `GetProductByIdUseCase` in `back-end/src/application/use-cases/`
+- [X] T025 [US2] Add `findById` to `PrismaProductRepository` (and its unit test)
+- [X] T026 [US2] Add `GET /products/:id` to the controller with `ParseUUIDPipe`; map `ProductNotFoundError` to 404 through the shared mapper
 
 **Checkpoint**: US1 and US2 work independently
 
