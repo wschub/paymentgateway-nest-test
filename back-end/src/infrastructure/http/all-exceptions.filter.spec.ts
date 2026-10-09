@@ -1,5 +1,5 @@
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { DataAccessError } from '../../domain/errors/data-access.error';
 import { ProductNotFoundError } from '../../domain/errors/product-not-found.error';
@@ -8,6 +8,16 @@ import type { ErrorBody } from './error-body';
 
 describe('AllExceptionsFilter', () => {
   const filter = new AllExceptionsFilter();
+
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    errorSpy = jest.spyOn(Logger.prototype, 'error');
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
 
   const catchException = (exception: unknown, url: string): ErrorBody => {
     const json = jest.fn();
@@ -155,5 +165,37 @@ describe('AllExceptionsFilter', () => {
     const body = catchException(new NotFoundException(), '/nope');
 
     expect(body.timestamp).toBe(new Date(body.timestamp).toISOString());
+  });
+
+  it('logs the original 500 exception at error level with its cause chain, without leaking it into the body', () => {
+    const original = new Error('hunter2 secret key sk_live_123 expired');
+    original.name = 'SecretsError';
+    Object.defineProperty(original, 'stack', { value: undefined });
+    original.cause = new Error('connect ECONNREFUSED 127.0.0.1:5432');
+    (original.cause as Error).name = 'DbConnectionError';
+
+    const body = catchException(original, '/products');
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [logged, chain] = errorSpy.mock.calls[0] as [unknown, string];
+    expect(logged).toBe(original);
+    expect(chain).toContain('SecretsError');
+    expect(chain).toContain('hunter2 secret key sk_live_123 expired');
+    expect(chain).toContain('Caused by');
+    expect(chain).toContain('DbConnectionError');
+    expect(chain).toContain('connect ECONNREFUSED');
+
+    expect(body.statusCode).toBe(500);
+    expect(JSON.stringify(body)).not.toContain('hunter2');
+    expect(JSON.stringify(body)).not.toContain('sk_live_123');
+    expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
+    expect(JSON.stringify(body)).not.toContain('SecretsError');
+  });
+
+  it('does not log client errors at error level', () => {
+    const body = catchException(new NotFoundException(), '/nope');
+
+    expect(body.statusCode).toBe(404);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
