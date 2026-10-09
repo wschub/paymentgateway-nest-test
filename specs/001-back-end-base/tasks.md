@@ -85,9 +85,9 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ## Phase 5: User Story 3 - API Documentation (P2)
 
-- [ ] T027 [US3] Swagger setup in `configureApp`: UI at `/docs`, JSON at `/docs-json`; metadata and tags (FR-010)
-- [ ] T028 [US3] Swagger decorators on controller and DTOs: 200/400/404/500 responses and the shared error schema
-- [ ] T029 [US3] e2e test: `/docs` is reachable and `/docs-json` lists `/products` and `/products/{id}` (SC-008)
+- [X] T027 [US3] Swagger setup in `configureApp`: UI at `/docs`, JSON at `/docs-json`; metadata and tags (FR-010)
+- [X] T028 [US3] Swagger decorators on controller and DTOs: 200/400/404/500 responses and the shared error schema
+- [X] T029 [US3] e2e test: `/docs` is reachable and `/docs-json` lists `/products` and `/products/{id}` (SC-008)
 
 ---
 

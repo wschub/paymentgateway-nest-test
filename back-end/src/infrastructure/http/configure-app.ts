@@ -5,6 +5,7 @@ import { Reflector } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerStorageService, seconds } from '@nestjs/throttler';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { configureSwagger } from './configure-swagger';
 
 export const configureApp = async (app: INestApplication): Promise<void> => {
   const config = app.get(ConfigService);
@@ -39,4 +40,6 @@ export const configureApp = async (app: INestApplication): Promise<void> => {
   );
   await guard.onModuleInit();
   app.useGlobalGuards(guard);
+
+  configureSwagger(app);
 };

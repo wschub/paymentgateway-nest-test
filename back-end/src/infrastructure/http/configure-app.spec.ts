@@ -1,7 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { configureSwagger } from './configure-swagger';
 import { configureApp } from './configure-app';
+
+jest.mock('./configure-swagger');
 
 describe('configureApp', () => {
   const env: Record<string, unknown> = {
@@ -93,5 +96,14 @@ describe('configureApp', () => {
     expect(useGlobalGuards).toHaveBeenCalledTimes(1);
     expect(guard.options).toEqual([{ ttl: 60_000, limit: 10 }]);
     expect(guard.headerPrefix).toBe('X-RateLimit');
+  });
+
+  it('configures Swagger with the application instance', async () => {
+    (configureSwagger as jest.Mock).mockClear();
+
+    await configureApp(app);
+
+    expect(configureSwagger).toHaveBeenCalledTimes(1);
+    expect(configureSwagger).toHaveBeenCalledWith(app);
   });
 });
