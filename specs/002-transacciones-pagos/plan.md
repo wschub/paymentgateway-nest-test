@@ -26,8 +26,11 @@ fakes, mocked `fetch`, and a fake gateway in e2e) are updated; no automated test
 
 **Storage**: PostgreSQL 14 or newer via Prisma. New migration extends `transactions`.
 
-**Testing**: Jest (unit `*.spec.ts`, e2e `*.e2e-spec.ts` + supertest). Use cases tested with in-memory fakes
-of every port; the adapter with a mocked `fetch`; e2e with the fake gateway. Coverage threshold ≥ 80 %.
+**Testing**: Jest (unit `*.spec.ts`, e2e `*.e2e-spec.ts` + supertest). Use cases tested with in-memory fakes of
+every port; the adapter with a mocked `fetch`; e2e with the fake gateway. Additionally, a **PostgreSQL
+integration suite** under `back-end/test/integration` (run with `npm run test:int`, config
+`back-end/test/jest-int.json`) covers real transactions/concurrency; its database name must end with `_test`
+and it is **excluded from `test:cov`**. Coverage threshold ≥ 80 %.
 
 **Target Platform**: Linux server (Node.js); local macOS development.
 
@@ -38,10 +41,11 @@ configurable timeout (default 10 s) and never block a request open.
 
 **Constraints**: No new dependencies; secrets only in env vars; no provider company name anywhere; strict
 hexagonal boundaries (use cases never import `PrismaClient`, the SDK or `fetch`); money as integer COP cents;
-atomic conditional stock changes.
+atomic conditional stock changes; use cases receive injected `Clock`, `ReferenceGenerator` and `FeesConfig`
+(references use crypto randomness, never only a timestamp).
 
 **Scale/Scope**: One product with a quantity per purchase; five endpoints (four functional + one optional
-webhook); four use cases; one migration.
+webhook); five use cases (four functional + one optional webhook); one migration; one integration suite.
 
 ## Constitution Check
 
@@ -102,21 +106,27 @@ back-end/
     │   │   ├── invalid-payment-token.error.ts        # new
     │   │   ├── payment-provider-unavailable.error.ts # new
     │   │   └── payment-provider-rejected.error.ts    # new
-    │   └── ports/
-    │       ├── payment-gateway.port.ts      # new
-    │       └── transaction.repository.ts    # new (checkout persistence port)
+    │   ├── ports/
+    │   │   ├── payment-gateway.port.ts      # new
+    │   │   ├── transaction.repository.ts    # new (checkout persistence port)
+    │   │   ├── clock.port.ts                # new (now(); injected into use cases)
+    │   │   └── reference-generator.port.ts  # new (crypto randomness; injected)
+    │   └── value-objects/
+    │       └── fees-config.ts               # new (baseFeeInCents, deliveryFeeInCents, currency)
     ├── application/
     │   └── use-cases/
-    │       ├── create-transaction.use-case.ts   # new
-    │       ├── pay-transaction.use-case.ts       # new
-    │       ├── get-transaction.use-case.ts       # new
-    │       └── get-checkout-config.use-case.ts   # new
+    │       ├── create-transaction.use-case.ts   # new (uses Clock + ReferenceGenerator + FeesConfig)
+    │       ├── pay-transaction.use-case.ts       # new (uses Clock for the claim lease)
+    │       ├── get-transaction.use-case.ts       # new (uses Clock for reservation expiry)
+    │       ├── get-checkout-config.use-case.ts   # new
+    │       └── payment-events.use-case.ts        # new (optional webhook, FR-013)
     └── infrastructure/
         ├── config/
         │   └── env.validation.ts            # extend (provider vars + fees + TTL/lease)
         ├── http/
         │   ├── transactions.controller.ts   # new
         │   ├── payments.controller.ts        # new
+        │   ├── payment-events.controller.ts  # new (optional webhook, FR-013)
         │   ├── create-transaction.dto.ts     # new
         │   ├── pay-transaction.dto.ts         # new
         │   ├── transaction-response.dto.ts    # new
@@ -136,11 +146,17 @@ back-end/
         └── fake-payment-gateway.ts              # new
 
 back-end/test/
+├── setup-env.ts                               # new (hermetic test env + global fetch guard)
+├── jest-int.json                              # new (integration Jest config)
 ├── checkout-config.e2e-spec.ts
 ├── transaction-create.e2e-spec.ts
 ├── transaction-payment.e2e-spec.ts
 ├── transaction-status.e2e-spec.ts
-└── setup-env.ts                               # new (hermetic test env)
+├── payment-declined.e2e-spec.ts               # new (US2)
+├── idempotency-overselling.e2e-spec.ts        # new (US3)
+├── payment-events.e2e-spec.ts                 # new (US4, optional)
+└── integration/
+    └── prisma-transaction.repository.int-spec.ts  # new (real PostgreSQL; DB name ends with _test)
 ```
 
 **Structure Decision**: Keep the existing hexagonal layout for the back-end app. New domain/application/

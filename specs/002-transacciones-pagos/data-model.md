@@ -88,6 +88,12 @@ PENDING ──expired──▶ VOIDED      (payment never started, past RESERVAT
 ## Value objects / domain concepts
 
 - **Money (cents)**: integer; the server is the only source of amounts.
+- **FeesConfig** (`domain/value-objects/fees-config.ts`): `{ baseFeeInCents, deliveryFeeInCents, currency }`,
+  injected into `CreateTransaction`; the server is the only source of amounts (no new dependency).
+- **Clock** (`domain/ports/clock.port.ts`): `now(): Date`; injected into `CreateTransaction`, `PayTransaction`
+  and `GetTransaction` so reservation expiry and the payment claim lease are deterministic in tests.
+- **ReferenceGenerator** (`domain/ports/reference-generator.port.ts`): `newReference(): string`; generates the
+  unique reference from `crypto` randomness (not only a timestamp), injected into `CreateTransaction`.
 - **Payment status**: the enum above; the provider status is mapped to it (unknown → `PENDING`, never finalized).
 - **Idempotency key**: 16–64 chars of letters, digits, dash or underscore from the `Idempotency-Key` header; a
   reuse with a different product, quantity or customer email is rejected (R4).
@@ -124,3 +130,16 @@ PENDING ──expired──▶ VOIDED      (payment never started, past RESERVAT
 - `finalize({ transactionId, status, providerTransactionId?, cardBrand?, cardLastFour?, installments?,
   failureReason? })` → `{ finalized: boolean, transaction }`. One Prisma `$transaction`: CAS status update,
   then assign delivery (APPROVED) or release stock (DECLINED/VOIDED/ERROR) (R7).
+
+## Optional webhook (FR-013)
+
+- HTTP entry point `back-end/src/infrastructure/http/payment-events.controller.ts`; use case
+  `back-end/src/application/use-cases/payment-events.use-case.ts`. It verifies the checksum with the events
+  secret, reconciles through `finalize` (R7) and ignores duplicates.
+
+## PostgreSQL integration suite
+
+- `back-end/test/integration/prisma-transaction.repository.int-spec.ts` runs against a **real PostgreSQL**
+  database whose name must end with `_test`, using the config `back-end/test/jest-int.json` and the script
+  `npm run test:int`. It is **excluded from `test:cov`**. It covers two concurrent purchases of the last unit,
+  concurrent finalization exactly once, the payment claim lease under contention, and the new CHECK constraints.

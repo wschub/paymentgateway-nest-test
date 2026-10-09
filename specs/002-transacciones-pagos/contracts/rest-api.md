@@ -77,13 +77,15 @@ previously created purchase (same `id` and `reference`), never a new one.
 
 | Status | code | When |
 |--------|------|------|
-| 400 | `BAD_REQUEST` | Malformed body, or missing/malformed `Idempotency-Key`. |
+| 400 | `BAD_REQUEST` | Malformed body, unknown/extra fields (e.g. client-sent amounts), or missing/malformed `Idempotency-Key`. |
 | 404 | `PRODUCT_NOT_FOUND` | The product does not exist. |
 | 409 | `INSUFFICIENT_STOCK` | Requested quantity exceeds available stock. |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | The key was reused with a different product, quantity or customer email. |
 
 Amounts are always recomputed by the server: `productAmount = product.priceInCents * quantity`,
-`baseFee`/`deliveryFee` from configuration, `total = sum`. Client amounts, if sent, are ignored.
+`baseFee`/`deliveryFee` from configuration, `total = sum`. Amounts are never taken from the client: any extra
+field (for example `amounts`, `productAmountInCents`, `totalInCents`) is rejected with 400 by the global
+whitelist validation (`forbidNonWhitelisted`).
 
 ---
 

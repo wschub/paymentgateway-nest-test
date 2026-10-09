@@ -108,6 +108,8 @@ Additional checks:
   `RESERVATION_EXPIRED`) and its stock returns.
 - An invalid/used card token yields 422 `INVALID_PAYMENT_TOKEN` and the shopper can retry with a new token.
 - A provider status that is not a known final value stays `PENDING` (a warning is logged) and never finalizes.
+- Sending client-computed amounts (e.g. an extra `amounts` field) returns 400 via the global whitelist
+  validation; the server always recomputes.
 - No response or log contains a provider secret or a full card number.
 
 ## Automated tests (no sandbox)
@@ -118,7 +120,10 @@ npm run lint
 npx tsc -p tsconfig.json --noEmit
 npm run test:cov      # unit: use cases with fakes, adapter with mocked fetch
 npm run test:e2e      # e2e with the fake gateway (setup-env.ts provides placeholders)
+npm run test:int      # integration against real PostgreSQL (DB name must end with _test)
 ```
+
+The sandbox spike (`./scripts/sandbox-spike.sh`) is the only manual check that talks to the provider.
 
 Definition of done: lint clean, type-check clean, coverage ≥ 80 %, no secrets and no provider company name,
 Swagger updated.

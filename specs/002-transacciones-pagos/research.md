@@ -186,6 +186,19 @@ docs/requirements.md. No open NEEDS CLARIFICATION remains.
 - **Alternatives considered**: a cron/queue sweeper (new infrastructure, out of scope); expiring only on read
   (the reserve path would still need it to avoid false `INSUFFICIENT_STOCK`).
 
+## R14. Testability seams and integration suite
+
+- **Decision**: Inject a `Clock` (`now()`) and a `ReferenceGenerator` (`newReference()` from `crypto`
+  randomness) into the use cases, and a `FeesConfig` value object (`baseFeeInCents`, `deliveryFeeInCents`,
+  `currency`) into `CreateTransaction`. Time-dependent behavior (reservation expiry, claim lease) becomes
+  deterministic in unit tests. Add a real-PostgreSQL integration suite (`npm run test:int`, config
+  `back-end/test/jest-int.json`, `back-end/test/integration`, database name ending in `_test`) for concurrency,
+  the lease and the CHECK constraints; it is excluded from `test:cov`.
+- **Rationale**: Keeps unit tests hermetic and fast while still proving the transactional guarantees that a
+  fake cannot; avoids a time dependency leaking into the domain.
+- **Alternatives considered**: real `new Date()`/`crypto.randomUUID()` inline (untestable time), testing
+  concurrency only with the in-memory fake (cannot prove the SQL-level guarantees).
+
 ## Best practices confirmed for the stack
 
 - Prisma: use `updateMany` for conditional updates; `$transaction(async (tx) => ...)` for multi-step atomic
