@@ -1,14 +1,24 @@
 import type { INestApplication } from '@nestjs/common';
-import { SwaggerModule } from '@nestjs/swagger';
 import { configureSwagger } from './configure-swagger';
 
-jest.mock('@nestjs/swagger', () => ({
-  ...jest.requireActual('@nestjs/swagger'),
-  SwaggerModule: {
-    createDocument: jest.fn(() => ({ paths: {} })),
-    setup: jest.fn(),
-  },
-}));
+const mockCreateDocument = jest.fn(() => ({ paths: {} }));
+const mockSetup = jest.fn();
+
+jest.mock('@nestjs/swagger', () => {
+  const actual = jest.requireActual('@nestjs/swagger');
+  return {
+    ...actual,
+    SwaggerModule: {
+      ...actual.SwaggerModule,
+      get createDocument() {
+        return mockCreateDocument;
+      },
+      get setup() {
+        return mockSetup;
+      },
+    },
+  };
+});
 
 describe('configureSwagger', () => {
   it('creates the document with API metadata and mounts it under docs', () => {
@@ -17,8 +27,8 @@ describe('configureSwagger', () => {
 
     configureSwagger(app);
 
-    expect(SwaggerModule.createDocument).toHaveBeenCalledTimes(1);
-    expect(SwaggerModule.createDocument).toHaveBeenCalledWith(
+    expect(mockCreateDocument).toHaveBeenCalledTimes(1);
+    expect(mockCreateDocument).toHaveBeenCalledWith(
       app,
       expect.objectContaining({
         info: expect.objectContaining({
@@ -30,7 +40,6 @@ describe('configureSwagger', () => {
         ]),
       }),
     );
-    const mockSetup = SwaggerModule.setup as jest.Mock;
     expect(mockSetup).toHaveBeenCalledTimes(1);
     expect(mockSetup).toHaveBeenCalledWith('docs', app, {
       paths: {},
