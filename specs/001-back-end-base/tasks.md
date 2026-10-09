@@ -70,12 +70,12 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ### Tests first
 
-- [ ] T022 [P] [US2] Unit tests for `GetProductByIdUseCase` with the fake repository: found, not found (`err(ProductNotFoundError)`), repository failure
+- [X] T022 [P] [US2] Unit tests for `GetProductByIdUseCase` with the fake repository: found, not found (`err(ProductNotFoundError)`), repository failure
 - [ ] T023 [P] [US2] e2e tests `back-end/test/product-detail.e2e-spec.ts`: 200 with full object, 404 with consistent error body, 400 for a non-UUID id with the same body shape (FR-002 to FR-005)
 
 ### Implementation
 
-- [ ] T024 [US2] Implement `GetProductByIdUseCase` in `back-end/src/application/use-cases/`
+- [X] T024 [US2] Implement `GetProductByIdUseCase` in `back-end/src/application/use-cases/`
 - [X] T025 [US2] Add `findById` to `PrismaProductRepository` (and its unit test)
 - [ ] T026 [US2] Add `GET /products/:id` to the controller with `ParseUUIDPipe`; map `ProductNotFoundError` to 404 through the shared mapper
 
