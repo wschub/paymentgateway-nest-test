@@ -198,4 +198,11 @@ Command names may differ by spec-kit version; use what the agent exposes.
   refreshes the status from the provider while it is `PENDING`. The front-end polls our API only.
 - D7: One product with a quantity per purchase (no multi-product cart) unless the plan decides otherwise.
 - D8: Fees: base fee 3,000 COP and delivery fee 9,000 COP, as configuration values (assumption, adjustable).
+- D9: Reservation expiry: a `PENDING` transaction whose payment was never started and that is older than a
+  configurable reservation time (default 15 minutes) is voided lazily with reason `RESERVATION_EXPIRED` and its
+  reserved stock is returned. It is released on read (transaction status) and before reserving stock. A purchase
+  whose payment already started and stays `PENDING` keeps its stock reserved (known limitation, see D6).
+- D10: Idempotency key: `POST /transactions` requires an `Idempotency-Key` of 16 to 64 characters from letters,
+  digits, dash or underscore. Reusing the same key with a different product, quantity or customer email is
+  rejected with 409 `IDEMPOTENCY_KEY_REUSED`; the same key with the same payload replays the existing purchase.
 

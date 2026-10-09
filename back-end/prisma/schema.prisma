@@ -59,6 +59,10 @@ model Transaction {
   totalInCents          Int               @map("total_in_cents")
   providerTransactionId String?           @map("provider_transaction_id")
   failureReason         String?           @map("failure_reason")
+  installments          Int?
+  cardBrand             String?           @map("card_brand")
+  cardLastFour          String?           @map("card_last_four")
+  paymentStartedAt      DateTime?         @map("payment_started_at")
   productId             String            @db.Uuid @map("product_id")
   customerId            String            @db.Uuid @map("customer_id")
   createdAt             DateTime          @default(now()) @map("created_at")
@@ -67,6 +71,7 @@ model Transaction {
   customer              Customer          @relation(fields: [customerId], references: [id])
   delivery              Delivery?
 
+  @@index([status, createdAt])
   @@map("transactions")
 }
 
