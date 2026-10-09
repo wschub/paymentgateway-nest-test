@@ -12,12 +12,24 @@ import type { Clock } from '../../domain/ports/clock.port';
 import type { ProductRepository } from '../../domain/ports/product.repository';
 import type { ReferenceGenerator } from '../../domain/ports/reference-generator.port';
 import type { TransactionRepository } from '../../domain/ports/transaction.repository';
+import {
+  isValidCustomerEmail,
+  isValidCustomerFullName,
+  isValidCustomerPhone,
+} from '../../domain/rules/customer.rules';
+import {
+  isValidDeliveryAddress,
+  isValidDeliveryCity,
+  isValidDeliveryNotes,
+  isValidDeliveryRegion,
+} from '../../domain/rules/delivery.rules';
+import { isNonEmptyString } from '../../domain/rules/string.rules';
+import {
+  isValidIdempotencyKey,
+  isValidQuantity,
+} from '../../domain/rules/transaction.rules';
 import type { FeesConfig } from '../../domain/value-objects/fees-config';
 import { err, ok, type Result } from '../result/result';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_PATTERN = /^[0-9+ ]{7,20}$/;
-const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
 export interface CreateCustomerInput {
   fullName: string;
@@ -61,9 +73,6 @@ export type CreateTransactionError =
   | InsufficientStockError
   | IdempotencyReplayNotSupportedError
   | DataAccessError;
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim() !== '';
 
 export class CreateTransactionUseCase {
   constructor(
@@ -163,35 +172,31 @@ export class CreateTransactionUseCase {
     if (!isNonEmptyString(input.productId)) {
       invalidFields.push('productId');
     }
-    if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
+    if (!isValidQuantity(input.quantity)) {
       invalidFields.push('quantity');
     }
-    if (!IDEMPOTENCY_KEY_PATTERN.test(input.idempotencyKey ?? '')) {
+    if (!isValidIdempotencyKey(input.idempotencyKey)) {
       invalidFields.push('idempotencyKey');
     }
-    if (
-      !isNonEmptyString(input.customer?.fullName) ||
-      input.customer.fullName.length > 120
-    ) {
+    if (!isValidCustomerFullName(input.customer?.fullName)) {
       invalidFields.push('fullName');
     }
-    if (!EMAIL_PATTERN.test(input.customer?.email ?? '')) {
+    if (!isValidCustomerEmail(input.customer?.email)) {
       invalidFields.push('email');
     }
-    if (!PHONE_PATTERN.test(input.customer?.phone ?? '')) {
+    if (!isValidCustomerPhone(input.customer?.phone)) {
       invalidFields.push('phone');
     }
-    if (!isNonEmptyString(input.delivery?.address)) {
+    if (!isValidDeliveryAddress(input.delivery?.address)) {
       invalidFields.push('address');
     }
-    if (!isNonEmptyString(input.delivery?.city)) {
+    if (!isValidDeliveryCity(input.delivery?.city)) {
       invalidFields.push('city');
     }
-    if (!isNonEmptyString(input.delivery?.region)) {
+    if (!isValidDeliveryRegion(input.delivery?.region)) {
       invalidFields.push('region');
     }
-    const notes = input.delivery?.notes;
-    if (notes !== null && notes !== undefined && (typeof notes !== 'string' || notes.length > 500)) {
+    if (!isValidDeliveryNotes(input.delivery?.notes)) {
       invalidFields.push('notes');
     }
 
