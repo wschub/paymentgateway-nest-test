@@ -31,8 +31,8 @@ description: "Task list for Back-end Base - Product Catalog API"
 ## Phase 2: Foundational (blocks all user stories)
 
 - [ ] T007 Define `back-end/prisma/schema.prisma` for Product, Customer, Transaction, Delivery exactly as in data-model.md (UUID ids, enums, FKs, unique keys, indexes, `*InCents` Int fields) (FR-007, FR-008)
-- [ ] T008 Create the migration with `prisma migrate dev --create-only`, edit the generated SQL to add the CHECK constraints listed in data-model.md, then apply it. Verify manually that inserting `stock = -1` fails and note the check in the README (FR-006)
-- [ ] T009 [P] Create idempotent `back-end/prisma/seed.ts` (upsert with fixed UUIDs, 8 to 10 tech accessories, relative `.webp` image paths); configure the seed command for the installed Prisma version; run it twice to prove idempotency (FR-009, SC-002)
+- [X] T008 Create the migration with `prisma migrate dev --create-only`, edit the generated SQL to add the CHECK constraints listed in data-model.md, then apply it. Verify manually that inserting `stock = -1` fails and note the check in the README (FR-006)
+- [X] T009 [P] Create idempotent `back-end/prisma/seed.ts` (upsert with fixed UUIDs, 8 to 10 tech accessories, relative `.webp` image paths); configure the seed command for the installed Prisma version; run it twice to prove idempotency (FR-009, SC-002)
 - [X] T010 [P] Environment config with startup validation (fail fast on missing variables) in `back-end/src/infrastructure/config/`
 - [X] T011 [P] `PrismaService` and its module in `back-end/src/infrastructure/persistence/`
 - [X] T012 [P] Write unit tests, then implement the `Result` type (`ok`, `err`, `map`, `flatMap`, `match`) in `back-end/src/application/result/`
@@ -51,14 +51,14 @@ description: "Task list for Back-end Base - Product Catalog API"
 ### Tests first
 
 - [X] T016 [P] [US1] Unit tests for `GetProductsUseCase` with an in-memory fake repository: full list, empty list (returns empty array), product with stock 0 still listed, repository failure returns `err`
-- [ ] T017 [P] [US1] e2e test `back-end/test/products-list.e2e-spec.ts` using the fake repository override: 200 with expected fields (id, name, description, priceInCents, stock, imageUrl), empty catalog returns `[]`
+- [X] T017 [P] [US1] e2e test `back-end/test/products-list.e2e-spec.ts` using the fake repository override: 200 with expected fields (id, name, description, priceInCents, stock, imageUrl), empty catalog returns `[]`
 
 ### Implementation
 
 - [X] T018 [US1] Implement `GetProductsUseCase` returning `Result` in `back-end/src/application/use-cases/` (FR-001)
 - [X] T019 [US1] Implement `PrismaProductRepository` (`findAll`) in `back-end/src/infrastructure/persistence/`; catch Prisma failures and return `err(DataAccessError)`; unit test with a mocked `PrismaService`
-- [ ] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
-- [ ] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
+- [X] T020 [US1] `ProductsController` with `GET /products`, response DTO and mapper in `back-end/src/infrastructure/http/` (no business logic)
+- [X] T021 [US1] Wire everything in Nest modules with `useFactory` providers and an injection token for the port; register in `app.module.ts`
 
 **Checkpoint**: US1 works on its own
 
