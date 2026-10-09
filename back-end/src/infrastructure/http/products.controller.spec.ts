@@ -1,7 +1,9 @@
 import { ok, err } from '../../application/result/result';
+import { GetProductByIdUseCase } from '../../application/use-cases/get-product-by-id.use-case';
 import { GetProductsUseCase } from '../../application/use-cases/get-products.use-case';
 import { Product } from '../../domain/entities/product.entity';
 import { DataAccessError } from '../../domain/errors/data-access.error';
+import { ProductNotFoundError } from '../../domain/errors/product-not-found.error';
 import { ProductResponseDto } from './product-response.dto';
 import { ProductsController } from './products.controller';
 
@@ -39,11 +41,16 @@ describe('ProductsController', () => {
     );
 
   let execute: jest.Mock;
+  let executeById: jest.Mock;
   let controller: ProductsController;
 
   beforeEach(() => {
     execute = jest.fn();
-    controller = new ProductsController({ execute } as unknown as GetProductsUseCase);
+    executeById = jest.fn();
+    controller = new ProductsController(
+      { execute } as unknown as GetProductsUseCase,
+      { execute: executeById } as unknown as GetProductByIdUseCase,
+    );
   });
 
   it('calls the use case and maps the products to ProductResponseDto', async () => {
@@ -69,5 +76,24 @@ describe('ProductsController', () => {
     execute.mockResolvedValue(err(error));
 
     await expect(controller.getProducts()).rejects.toBe(error);
+  });
+
+  describe('getProductById', () => {
+    it('calls the use case with the id and maps the product to ProductResponseDto', async () => {
+      executeById.mockResolvedValue(ok(mouse));
+
+      const response = await controller.getProductById(mouse.id);
+
+      expect(executeById).toHaveBeenCalledWith(mouse.id);
+      expect(response).toEqual(dto(mouse));
+      expect(response).toBeInstanceOf(ProductResponseDto);
+    });
+
+    it('forwards a not-found result without deciding the status code itself', async () => {
+      const notFound = new ProductNotFoundError(mouse.id);
+      executeById.mockResolvedValue(err(notFound));
+
+      await expect(controller.getProductById(mouse.id)).rejects.toBe(notFound);
+    });
   });
 });
