@@ -28,9 +28,11 @@ supervised use of AI as a coding assistant.
 - **FR-1** Product page lists seeded products with units available. Out-of-stock products cannot be bought.
 - **FR-2** "Pay with credit card" opens a modal.
 - **FR-3** Card form with validation: number (Luhn, length), brand detection with VISA / MasterCard logos
-  (bonus), expiry (not in the past), CVC, cardholder name. Test card data only.
+  (bonus), expiry (not in the past), CVC, cardholder name (at least 5 characters, as the provider requires), and the
+  number of installments (1 by default). Test card data only. The customer must tick two checkboxes (terms and
+  conditions, personal data authorization) with links to both contracts before paying.
 - **FR-4** Delivery form: full name, email, phone, address, city, region, optional notes. Validated.
-- **FR-5** Summary shows product amount, base fee (always added) and delivery fee. Fees are configurable constants.
+- **FR-5** Summary shows product amount, base fee (always added) and delivery fee (9,000 COP). Fees are configuration values; amounts are always recomputed by the server.
 - **FR-6** On pay: (1) create a `PENDING` transaction in our API and get its number; (2) call the payment provider;
   (3) when it finishes (approved or not): update the transaction with the result, assign the product to the
   customer's delivery (only when approved), and update stock.
@@ -42,9 +44,11 @@ supervised use of AI as a coding assistant.
 
 Entities (all required by the brief): **Product (with stock)**, **Customer**, **Transaction**, **Delivery**.
 
-- Money is stored as integers in minor units; currency COP.
+- Money is handled in integer **cents** (COP x 100), which is what the payment provider expects. Product prices in
+  the seed are expressed in cents (for example 15,000 COP is stored as 1500000). The UI shows `cents / 100`.
 - Transaction status enum: `PENDING`, `APPROVED`, `DECLINED`, `VOIDED`, `ERROR`.
-- Each transaction has a unique `reference` and an idempotency key.
+- Each transaction has a unique `reference` and an idempotency key. It also keeps the provider transaction id, the
+  card brand, the last four digits and the installments (never the card number or CVC).
 - DB constraints: `stock >= 0` (CHECK in a SQL migration), unique keys, foreign keys, enums.
 - Seed: 8 to 10 tech-accessory products with small WebP images.
 - The data model diagram goes in the README.
@@ -54,27 +58,50 @@ Entities (all required by the brief): **Product (with stock)**, **Customer**, **
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/products`, `/products/:id` | Includes available stock |
-| POST | `/transactions` | Creates the `PENDING` transaction, customer and delivery data; returns id and reference. Honors `Idempotency-Key`. |
-| POST | `/transactions/:id/payment` | Backend calls the provider with the card token and finalizes the transaction |
-| GET | `/transactions/:id` | Source of truth for the status (used after refresh) |
-| POST | `/webhooks/payment-events` | Optional: provider events, signature verified |
+| GET | `/payments/checkout-config` | Public key and API base URL for browser tokenization, plus the links of the two contracts to accept. No secrets. |
+| POST | `/transactions` | Creates the `PENDING` transaction with customer and delivery data and reserves stock; the server computes the amounts and returns the breakdown, id and reference. Honors `Idempotency-Key`. |
+| POST | `/transactions/:id/payment` | Body: card token, installments and the acceptance flag. The server fetches fresh acceptance tokens, builds the integrity signature, creates the provider transaction and answers with the current status (usually `PENDING`). |
+| GET | `/transactions/:id` | Source of truth for the front-end. While the transaction is `PENDING`, the server asks the provider for its status and finalizes it (idempotently) when it is final. |
+| POST | `/webhooks/payment-events` | Optional: provider events, checksum verified with the events secret, duplicates ignored. |
 
-Correct HTTP usage: proper verbs, status codes (201, 400, 404, 409, 422), consistent error body.
+Correct HTTP usage: proper verbs, status codes (201, 202, 400, 404, 409, 422, 429), consistent error body.
 
 Validations to define per endpoint include: product exists, quantity > 0, enough stock, valid customer and
-delivery fields, transaction is still `PENDING`, no double payment of the same transaction, token present,
-idempotent retries.
+delivery fields, the transaction is still `PENDING`, no double payment of the same transaction, token present,
+both contracts accepted, idempotent retries, and amounts never taken from the client.
 
 ## 6. Payment provider integration (sandbox only)
 
-- Always use the sandbox environment and the sandbox keys. No real money.
-- The browser tokenizes the card directly with the provider's **public key**. The back-end never receives
-  card number or CVC.
-- The back-end uses the private key and integrity secret server-side only (integrity signature, acceptance
-  token and other fields as required by the provider docs; verify exact fields during the plan).
-- The provider can answer `PENDING` first: the back-end polls the status with a timeout (and/or handles the
-  webhook) until a final state.
-- Keys live in environment variables. Commit a `.env.example` with empty values, never the real ones.
+The integration is **API based with our own card form**. The hosted widget and the hosted checkout page are not used,
+because the card must be collected in our modal.
+
+Flow:
+
+1. The browser asks `GET /payments/checkout-config` and shows the two contract links with their checkboxes.
+2. The browser tokenizes the card directly with the provider (`POST /tokens/cards`, authorized with the **public key**):
+   number, cvc, exp_month and exp_year (two digits each, as strings) and card_holder (at least 5 characters). The
+   response gives the token and the brand. A token is single use. The back-end never receives number or CVC.
+3. `POST /transactions` creates our `PENDING` transaction and reserves stock.
+4. `POST /transactions/:id/payment` makes the back-end create the provider transaction (`POST /transactions`) with:
+   `acceptance_token` and `accept_personal_auth` (both obtained fresh from the merchant endpoint with the public key),
+   `amount_in_cents`, `currency` COP, `customer_email`, a unique `reference`, `signature` and
+   `payment_method` `{ type: CARD, token, installments }`.
+5. `signature` is the SHA256 hex of `reference + amount_in_cents + currency + integrity secret`, computed only on the server.
+6. The provider never answers synchronously: the new transaction is `PENDING`. The server reads
+   `GET /transactions/<id>` until a final state (`APPROVED`, `DECLINED`, `VOIDED`, `ERROR`) and then finalizes ours:
+   stores the result, assigns the delivery when approved and releases the reserved stock otherwise.
+7. Events (webhook) are optional and need a public URL. If implemented, verify the checksum with the events secret
+   and ignore duplicates.
+
+Configuration (environment variables; names only, values only in the local `.env`):
+`pub_stagtest`, `prv_stagtest`, `stagtest_events`, `stagtest_integrity` and `UAT_SANDBOX_URL` (the sandbox API base URL
+given for the test). Never commit values. Always use the sandbox.
+
+Sandbox test cards (any future expiry, any 3-digit CVC): `4242 4242 4242 4242` is approved,
+`4111 1111 1111 1111` is declined, any other card ends in `ERROR`.
+
+To confirm against the sandbox before coding the adapter: which key authorizes the creation of the transaction
+(expected: the private key, from the server).
 
 ## 7. Frontend
 
@@ -166,3 +193,9 @@ Command names may differ by spec-kit version; use what the agent exposes.
 - D2: Guest checkout, no customer authentication.
 - D3: Single monorepo, back-end tests with Jest (CommonJS).
 - D4: Base fee and delivery fee are configurable constants; exact values chosen in the plan.
+- D5: Card payments use the provider API with our own form, never the hosted widget or checkout page.
+- D6: The back-end does not hold requests open: payment returns the current status and `GET /transactions/:id`
+  refreshes the status from the provider while it is `PENDING`. The front-end polls our API only.
+- D7: One product with a quantity per purchase (no multi-product cart) unless the plan decides otherwise.
+- D8: Fees: base fee 3,000 COP and delivery fee 9,000 COP, as configuration values (assumption, adjustable).
+

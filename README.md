@@ -186,7 +186,7 @@ Returns the full product catalog (products with `stock` 0 are still listed). 200
     "id": "77777777-7777-4777-8777-777777777777",
     "name": "Cable Organizer",
     "description": "Cable management set",
-    "priceInCents": 15000,
+    "priceInCents": 1500000,
     "stock": 40,
     "imageUrl": "/images/products/cable-organizer.webp"
   },
@@ -194,7 +194,7 @@ Returns the full product catalog (products with `stock` 0 are still listed). 200
     "id": "99999999-9999-4999-8999-999999999999",
     "name": "External SSD",
     "description": "1TB portable SSD",
-    "priceInCents": 350000,
+    "priceInCents": 35000000,
     "stock": 7,
     "imageUrl": "/images/products/external-ssd.webp"
   }
@@ -210,7 +210,7 @@ Returns a single product (`id` is a UUID). 200 example:
   "id": "77777777-7777-4777-8777-777777777777",
   "name": "Cable Organizer",
   "description": "Cable management set",
-  "priceInCents": 15000,
+  "priceInCents": 1500000,
   "stock": 40,
   "imageUrl": "/images/products/cable-organizer.webp"
 }
