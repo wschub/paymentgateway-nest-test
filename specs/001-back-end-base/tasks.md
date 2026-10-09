@@ -93,8 +93,8 @@ description: "Task list for Back-end Base - Product Catalog API"
 
 ## Phase 6: Polish and verification
 
-- [ ] T030 [P] e2e security tests: Helmet headers present, no `x-powered-by`, CORS rejects a non-allowed origin, rate limit returns 429 (use a low limit only inside this test) (FR-012)
-- [ ] T031 [P] e2e test: repository failure produces a generic 500 body with no internal details
+- [X] T030 [P] e2e security tests: Helmet headers present, no `x-powered-by`, CORS rejects a non-allowed origin, rate limit returns 429 (use a low limit only inside this test) (FR-012)
+- [X] T031 [P] e2e test: repository failure produces a generic 500 body with no internal details
 - [ ] T032 [P] Root `README.md`: overview, architecture (hexagonal layers), how to run (docker compose, migrate, seed, start), tests and coverage commands, Swagger path, the Mermaid ER diagram from data-model.md, coverage exclusions and the CHECK verification note
 - [ ] T033 Run `npm run test:cov` and `npm run test:e2e`; confirm coverage is at least 80% and add the summary to the README (SC-007)
 - [ ] T034 Clean-start validation: from a fresh clone run docker compose, migrate, seed, start, then call both endpoints with `curl` (SC-001, SC-003 to SC-006)
