@@ -7,11 +7,29 @@ export interface AppEnv {
   CORS_ORIGINS: string;
   RATE_LIMIT_TTL: number;
   RATE_LIMIT_MAX: number;
+  pub_stagtest: string;
+  prv_stagtest: string;
+  stagtest_events: string;
+  stagtest_integrity: string;
+  UAT_SANDBOX_URL: string;
+  BASE_FEE_IN_CENTS: number;
+  DELIVERY_FEE_IN_CENTS: number;
+  PAYMENT_TIMEOUT_MS: number;
+  RESERVATION_TTL_SECONDS: number;
+  PAYMENT_CLAIM_LEASE_SECONDS: number;
 }
 
 export type ValidatedEnv = AppEnv & Record<string, unknown>;
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
+
+const OPTION_DEFAULTS = {
+  BASE_FEE_IN_CENTS: 300000,
+  DELIVERY_FEE_IN_CENTS: 900000,
+  PAYMENT_TIMEOUT_MS: 10000,
+  RESERVATION_TTL_SECONDS: 900,
+  PAYMENT_CLAIM_LEASE_SECONDS: 120,
+} as const;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== '';
@@ -23,6 +41,15 @@ const isHttpOrigin = (value: string): boolean => {
       (url.protocol === 'http:' || url.protocol === 'https:') &&
       url.origin === value
     );
+  } catch {
+    return false;
+  }
+};
+
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
   } catch {
     return false;
   }
@@ -56,6 +83,35 @@ const readInteger = (
   if (!Number.isInteger(value) || !isValid(value)) {
     problems.push(`${key} must be ${expectation} (received "${raw}")`);
     return Number.NaN;
+  }
+  return value;
+};
+
+const readOptionalInteger = (
+  env: Record<string, unknown>,
+  key: string,
+  defaultValue: number,
+  problems: string[],
+  isValid: (value: number) => boolean,
+  expectation: string,
+): number => {
+  const raw = env[key];
+  if (raw === undefined || raw === null) {
+    return defaultValue;
+  }
+  const rawString =
+    typeof raw === 'string'
+      ? raw.trim()
+      : typeof raw === 'number'
+        ? String(raw)
+        : 'UNSUPPORTED_TYPE';
+  if (rawString === '') {
+    return defaultValue;
+  }
+  const value = Number(rawString);
+  if (!Number.isInteger(value) || !isValid(value)) {
+    problems.push(`${key} must be ${expectation} (received "${rawString}")`);
+    return defaultValue;
   }
   return value;
 };
@@ -116,6 +172,18 @@ const readCorsOrigins = (
   return value;
 };
 
+const readHttpUrl = (
+  env: Record<string, unknown>,
+  key: string,
+  problems: string[],
+): string => {
+  const value = readString(env, key, problems);
+  if (value !== '' && !isHttpUrl(value)) {
+    problems.push(`${key} must be an http(s) URL`);
+  }
+  return value;
+};
+
 export const validateEnv = (env: Record<string, unknown>): ValidatedEnv => {
   const problems: string[] = [];
 
@@ -144,6 +212,53 @@ export const validateEnv = (env: Record<string, unknown>): ValidatedEnv => {
     'a positive integer',
   );
 
+  const pubStagtest = readString(env, 'pub_stagtest', problems);
+  const prvStagtest = readString(env, 'prv_stagtest', problems);
+  const stagtestEvents = readString(env, 'stagtest_events', problems);
+  const stagtestIntegrity = readString(env, 'stagtest_integrity', problems);
+  const uatSandboxUrl = readHttpUrl(env, 'UAT_SANDBOX_URL', problems);
+
+  const baseFeeInCents = readOptionalInteger(
+    env,
+    'BASE_FEE_IN_CENTS',
+    OPTION_DEFAULTS.BASE_FEE_IN_CENTS,
+    problems,
+    (value) => value >= 0,
+    'a non-negative integer',
+  );
+  const deliveryFeeInCents = readOptionalInteger(
+    env,
+    'DELIVERY_FEE_IN_CENTS',
+    OPTION_DEFAULTS.DELIVERY_FEE_IN_CENTS,
+    problems,
+    (value) => value >= 0,
+    'a non-negative integer',
+  );
+  const paymentTimeoutMs = readOptionalInteger(
+    env,
+    'PAYMENT_TIMEOUT_MS',
+    OPTION_DEFAULTS.PAYMENT_TIMEOUT_MS,
+    problems,
+    (value) => value >= 1,
+    'a positive integer',
+  );
+  const reservationTtlSeconds = readOptionalInteger(
+    env,
+    'RESERVATION_TTL_SECONDS',
+    OPTION_DEFAULTS.RESERVATION_TTL_SECONDS,
+    problems,
+    (value) => value >= 1,
+    'a positive integer',
+  );
+  const paymentClaimLeaseSeconds = readOptionalInteger(
+    env,
+    'PAYMENT_CLAIM_LEASE_SECONDS',
+    OPTION_DEFAULTS.PAYMENT_CLAIM_LEASE_SECONDS,
+    problems,
+    (value) => value >= 1,
+    'a positive integer',
+  );
+
   if (problems.length > 0) {
     throw new Error(
       `Invalid environment configuration:\n${problems
@@ -160,5 +275,15 @@ export const validateEnv = (env: Record<string, unknown>): ValidatedEnv => {
     CORS_ORIGINS: corsOrigins,
     RATE_LIMIT_TTL: rateLimitTtl,
     RATE_LIMIT_MAX: rateLimitMax,
+    pub_stagtest: pubStagtest,
+    prv_stagtest: prvStagtest,
+    stagtest_events: stagtestEvents,
+    stagtest_integrity: stagtestIntegrity,
+    UAT_SANDBOX_URL: uatSandboxUrl,
+    BASE_FEE_IN_CENTS: baseFeeInCents,
+    DELIVERY_FEE_IN_CENTS: deliveryFeeInCents,
+    PAYMENT_TIMEOUT_MS: paymentTimeoutMs,
+    RESERVATION_TTL_SECONDS: reservationTtlSeconds,
+    PAYMENT_CLAIM_LEASE_SECONDS: paymentClaimLeaseSeconds,
   };
 };
