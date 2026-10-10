@@ -9,9 +9,8 @@ import { FakePaymentGateway } from './fake-payment-gateway';
 
 describe('FakePaymentGateway', () => {
   const merchantInfo: MerchantInfo = {
-    publicKey: 'pub_test_public_key',
-    baseUrl: 'https://sandbox.invalid/v1',
-    currency: 'COP',
+    acceptanceToken: 'tok_acceptance_test',
+    personalDataAuthToken: 'tok_personal_data_test',
     contracts: {
       terms: 'https://example.test/terms',
       personalData: 'https://example.test/privacy',
@@ -20,6 +19,8 @@ describe('FakePaymentGateway', () => {
   };
 
   const input: CreateCardTransactionInput = {
+    acceptanceToken: 'tok_acceptance_test',
+    acceptPersonalAuth: 'tok_personal_data_test',
     reference: 'TXN-A1B2C3D4E5F6G7H8',
     cardToken: 'tok_test_1234',
     amountInCents: 74500,
@@ -90,10 +91,12 @@ describe('FakePaymentGateway', () => {
     );
   });
 
-  it('returns null when nothing matches a lookup', async () => {
+  it('throws a rejection error asking for an unknown provider transaction', async () => {
     const gateway = new FakePaymentGateway(merchantInfo);
 
-    await expect(gateway.getTransaction('missing')).resolves.toBeNull();
+    await expect(gateway.getTransaction('missing')).rejects.toBeInstanceOf(
+      PaymentProviderRejectedError,
+    );
     await expect(gateway.findByReference('TXN-0000000000000000')).resolves.toBeNull();
   });
 

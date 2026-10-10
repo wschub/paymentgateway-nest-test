@@ -25,9 +25,8 @@ const FIXED_REFERENCE = 'TXN-A1B2C3D4E5F6G7H8';
 const FIXED_NOW = new Date('2026-10-09T10:00:00.000Z');
 
 const merchantInfo: MerchantInfo = {
-  publicKey: 'pub_test_public_key',
-  baseUrl: 'https://sandbox.invalid/v1',
-  currency: 'COP',
+  acceptanceToken: 'tok_acceptance_test',
+  personalDataAuthToken: 'tok_personal_data_test',
   contracts: {
     terms: 'https://example.test/terms',
     personalData: 'https://example.test/privacy',
@@ -43,6 +42,8 @@ const config: AppConfigValues = {
 };
 
 const providerCreateInput: CreateCardTransactionInput = {
+  acceptanceToken: 'tok_acceptance_test',
+  acceptPersonalAuth: 'tok_personal_data_test',
   reference: FIXED_REFERENCE,
   cardToken: 'tok_test_1234',
   amountInCents: 144500,

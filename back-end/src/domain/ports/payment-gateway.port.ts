@@ -1,7 +1,6 @@
 export interface MerchantInfo {
-  publicKey: string;
-  baseUrl: string;
-  currency: string;
+  acceptanceToken: string;
+  personalDataAuthToken: string;
   contracts: {
     terms: string;
     personalData: string;
@@ -34,6 +33,8 @@ export interface ProviderTransaction {
 }
 
 export interface CreateCardTransactionInput {
+  acceptanceToken: string;
+  acceptPersonalAuth: string;
   reference: string;
   cardToken: string;
   amountInCents: number;
@@ -47,6 +48,6 @@ export interface PaymentGateway {
   createCardTransaction(
     input: CreateCardTransactionInput,
   ): Promise<ProviderTransaction>;
-  getTransaction(id: string): Promise<ProviderTransaction | null>;
+  getTransaction(id: string): Promise<ProviderTransaction>;
   findByReference(reference: string): Promise<ProviderTransaction | null>;
 }
