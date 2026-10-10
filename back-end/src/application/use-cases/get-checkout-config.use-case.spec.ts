@@ -18,9 +18,8 @@ const config: AppConfigValues = {
 };
 
 const merchantInfo: MerchantInfo = {
-  publicKey: 'pub_test_merchant_key',
-  baseUrl: 'https://sandbox.invalid/v1',
-  currency: 'USD',
+  acceptanceToken: 'tok_acceptance_test',
+  personalDataAuthToken: 'tok_personal_data_test',
   contracts: {
     terms: 'https://example.test/terms',
     personalData: 'https://example.test/privacy',
@@ -33,7 +32,9 @@ const buildGateway = (): PaymentGateway => ({
   createCardTransaction: async () => {
     throw new Error('not used in this spec');
   },
-  getTransaction: async () => null,
+  getTransaction: async () => {
+    throw new Error('not used in this spec');
+  },
   findByReference: async () => null,
 });
 
@@ -70,8 +71,8 @@ describe('GetCheckoutConfigUseCase', () => {
       'publicKey',
     ]);
     const serialized = JSON.stringify(result.value);
-    expect(serialized).not.toContain('pub_test_merchant_key');
-    expect(serialized).not.toContain('sandbox.invalid');
+    expect(serialized).not.toContain('tok_acceptance_test');
+    expect(serialized).not.toContain('tok_personal_data_test');
     expect(serialized).not.toContain('prv');
   });
 
@@ -79,7 +80,7 @@ describe('GetCheckoutConfigUseCase', () => {
     const failedGateway: PaymentGateway = {
       ...buildGateway(),
       getMerchantInfo: async () => {
-        throw new PaymentProviderUnavailableError();
+        throw new PaymentProviderUnavailableError('network');
       },
     };
     const useCase = new GetCheckoutConfigUseCase(config, failedGateway);

@@ -127,6 +127,8 @@ export class PayTransactionUseCase {
     if (providerTransaction === null) {
       try {
         providerTransaction = await this.paymentGateway.createCardTransaction({
+          acceptanceToken: merchantInfo.acceptanceToken,
+          acceptPersonalAuth: merchantInfo.personalDataAuthToken,
           reference: details.transaction.reference,
           cardToken: input.cardToken,
           amountInCents: details.transaction.totalInCents,
