@@ -8,7 +8,9 @@ export type InvalidTransactionRequestField =
   | 'address'
   | 'city'
   | 'region'
-  | 'notes';
+  | 'notes'
+  | 'cardToken'
+  | 'installments';
 
 export class InvalidTransactionRequestError extends Error {
   readonly invalidFields: readonly InvalidTransactionRequestField[];
