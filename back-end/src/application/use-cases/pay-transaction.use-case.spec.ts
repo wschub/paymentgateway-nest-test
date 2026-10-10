@@ -11,14 +11,12 @@ import type {
   MerchantInfo,
   PaymentGateway,
 } from '../../domain/ports/payment-gateway.port';
-import type {
-  AttachProviderTransactionInput,
-  CreatePendingWithReservedStockInput,
-  FinalizeInput,
-  TransactionRepository,
-} from '../../domain/ports/transaction.repository';
 import { FakePaymentGateway } from '../../testing/fake-payment-gateway';
 import { InMemoryTransactionRepository } from '../../testing/in-memory-transaction.repository';
+import {
+  recordingPaymentGateway,
+  recordingTransactionRepository,
+} from '../../testing/recording-transaction-dependencies';
 import type { AppConfigValues } from '../config-values';
 import { PayTransactionUseCase, type PayTransactionInput } from './pay-transaction.use-case';
 
@@ -95,60 +93,6 @@ const seedTransaction = async (
   return created.transaction.id;
 };
 
-const recordingRepository = (
-  repo: InMemoryTransactionRepository,
-  order: string[],
-): TransactionRepository => ({
-  findById: async (id: string) => {
-    order.push('findById');
-    return repo.findById(id);
-  },
-  findByIdempotencyKey: async (key: string) => repo.findByIdempotencyKey(key),
-  releaseExpiredReservations: async (now: Date) =>
-    repo.releaseExpiredReservations(now),
-  createPendingWithReservedStock: async (
-    input: CreatePendingWithReservedStockInput,
-  ) => repo.createPendingWithReservedStock(input),
-  claimPayment: async (id: string, now: Date, leaseSeconds: number) => {
-    order.push('claimPayment');
-    return repo.claimPayment(id, now, leaseSeconds);
-  },
-  releasePaymentClaim: async (id: string) => {
-    order.push('releasePaymentClaim');
-    return repo.releasePaymentClaim(id);
-  },
-  attachProviderTransaction: async (input: AttachProviderTransactionInput) => {
-    order.push('attachProviderTransaction');
-    return repo.attachProviderTransaction(input);
-  },
-  finalize: async (input: FinalizeInput) => {
-    order.push('finalize');
-    return repo.finalize(input);
-  },
-});
-
-const recordingGateway = (
-  gateway: FakePaymentGateway,
-  order: string[],
-): PaymentGateway => ({
-  getMerchantInfo: async () => {
-    order.push('getMerchantInfo');
-    return gateway.getMerchantInfo();
-  },
-  createCardTransaction: async (input: CreateCardTransactionInput) => {
-    order.push('createCardTransaction');
-    return gateway.createCardTransaction(input);
-  },
-  getTransaction: async (id: string) => {
-    order.push('getTransaction');
-    return gateway.getTransaction(id);
-  },
-  findByReference: async (reference: string) => {
-    order.push('findByReference');
-    return gateway.findByReference(reference);
-  },
-});
-
 const setup = async (): Promise<{
   useCase: PayTransactionUseCase;
   repo: InMemoryTransactionRepository;
@@ -167,8 +111,8 @@ const setup = async (): Promise<{
   const gateway = new FakePaymentGateway(merchantInfo);
   const transactionId = await seedTransaction(repo, FIXED_NOW);
   const useCase = new PayTransactionUseCase(
-    recordingRepository(repo, order),
-    recordingGateway(gateway, order),
+    recordingTransactionRepository(repo, order),
+    recordingPaymentGateway(gateway, order),
     clock,
     config,
   );
@@ -794,7 +738,7 @@ describe('PayTransactionUseCase', () => {
     };
     const clock: Clock = { now: () => FIXED_NOW };
     const useCase = new PayTransactionUseCase(
-      recordingRepository(repo, order),
+      recordingTransactionRepository(repo, order),
       exploding,
       clock,
       config,

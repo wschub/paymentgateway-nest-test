@@ -13,10 +13,8 @@ import type { Clock } from '../../domain/ports/clock.port';
 import type {
   PaymentGateway,
   ProviderTransaction,
-  ProviderTransactionStatus,
 } from '../../domain/ports/payment-gateway.port';
 import type {
-  FinalizeStatus,
   TransactionDetails,
   TransactionRepository,
 } from '../../domain/ports/transaction.repository';
@@ -26,6 +24,10 @@ import {
   MIN_INSTALLMENTS,
 } from '../../domain/rules/transaction.rules';
 import type { AppConfigValues } from '../config-values';
+import {
+  buildFinalizeInput,
+  isFinalProviderStatus,
+} from '../finalize-input';
 import { err, ok, type Result } from '../result/result';
 import { buildTransactionView, type TransactionView } from '../transaction-view';
 
@@ -45,28 +47,6 @@ export type PayTransactionError =
   | PaymentProviderRejectedError
   | PaymentProviderUnavailableError
   | DataAccessError;
-
-const FINAL_PROVIDER_STATUSES: readonly ProviderTransactionStatus[] = [
-  'APPROVED',
-  'DECLINED',
-  'VOIDED',
-  'ERROR',
-];
-
-const FAILURE_REASON_MAX_LENGTH = 200;
-
-const failureReasonFor = (
-  providerTransaction: ProviderTransaction,
-): string | null | undefined => {
-  if (providerTransaction.status === 'APPROVED') {
-    return undefined;
-  }
-  const message = providerTransaction.statusMessage?.trim() ?? '';
-  if (message === '') {
-    return null;
-  }
-  return message.slice(0, FAILURE_REASON_MAX_LENGTH);
-};
 
 export class PayTransactionUseCase {
   constructor(
@@ -171,7 +151,7 @@ export class PayTransactionUseCase {
       providerTransactionId: providerTransaction.id,
     });
 
-    if (!FINAL_PROVIDER_STATUSES.includes(providerTransaction.status)) {
+    if (!isFinalProviderStatus(providerTransaction.status)) {
       const fresh = await this.load(details.transaction.id);
       if (fresh === null) {
         return err(new TransactionNotFoundError(details.transaction.id));
@@ -179,15 +159,9 @@ export class PayTransactionUseCase {
       return ok(buildTransactionView(fresh));
     }
 
-    await this.transactionRepository.finalize({
-      transactionId: details.transaction.id,
-      status: providerTransaction.status as FinalizeStatus,
-      providerTransactionId: providerTransaction.id,
-      cardBrand: providerTransaction.cardBrand,
-      cardLastFour: providerTransaction.cardLastFour,
-      installments: providerTransaction.installments,
-      failureReason: failureReasonFor(providerTransaction),
-    });
+    await this.transactionRepository.finalize(
+      buildFinalizeInput(details.transaction.id, providerTransaction),
+    );
 
     const refreshed = await this.load(details.transaction.id);
     if (refreshed === null) {
