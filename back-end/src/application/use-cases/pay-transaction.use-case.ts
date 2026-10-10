@@ -4,6 +4,9 @@ import {
   InvalidTransactionRequestError,
   type InvalidTransactionRequestField,
 } from '../../domain/errors/invalid-transaction-request.error';
+import { InvalidPaymentTokenError } from '../../domain/errors/invalid-payment-token.error';
+import { PaymentProviderRejectedError } from '../../domain/errors/payment-provider-rejected.error';
+import { PaymentProviderUnavailableError } from '../../domain/errors/payment-provider-unavailable.error';
 import { TransactionNotFoundError } from '../../domain/errors/transaction-not-found.error';
 import { TransactionNotPayableError } from '../../domain/errors/transaction-not-payable.error';
 import type { Clock } from '../../domain/ports/clock.port';
@@ -115,18 +118,22 @@ export class PayTransactionUseCase {
       details.transaction.reference,
     );
     if (providerTransaction === null) {
-      providerTransaction = await this.paymentGateway.createCardTransaction({
-        reference: details.transaction.reference,
-        cardToken: input.cardToken,
-        amountInCents: details.transaction.totalInCents,
-        currency: this.config.currency,
-        installments,
-        customer: {
-          fullName: details.customer.fullName,
-          email: details.customer.email,
-          phone: details.customer.phone,
-        },
-      });
+      try {
+        providerTransaction = await this.paymentGateway.createCardTransaction({
+          reference: details.transaction.reference,
+          cardToken: input.cardToken,
+          amountInCents: details.transaction.totalInCents,
+          currency: this.config.currency,
+          installments,
+          customer: {
+            fullName: details.customer.fullName,
+            email: details.customer.email,
+            phone: details.customer.phone,
+          },
+        });
+      } catch (error) {
+        return await this.handleGatewayFailure(error, details.transaction.id);
+      }
     }
 
     await this.transactionRepository.attachProviderTransaction({
@@ -189,6 +196,67 @@ export class PayTransactionUseCase {
     transactionId: string,
   ): Promise<TransactionDetails | null> {
     return this.transactionRepository.findById(transactionId);
+  }
+
+  private async handleGatewayFailure(
+    error: unknown,
+    transactionId: string,
+  ): Promise<Result<TransactionView, PayTransactionError>> {
+    if (error instanceof InvalidPaymentTokenError) {
+      await this.transactionRepository.releasePaymentClaim(transactionId);
+      throw error;
+    }
+    if (error instanceof PaymentProviderRejectedError) {
+      await this.transactionRepository.releasePaymentClaim(transactionId);
+      throw error;
+    }
+    if (error instanceof PaymentProviderUnavailableError) {
+      const adopted = await this.tryAdoptFromProvider(transactionId);
+      if (adopted !== null) {
+        return adopted;
+      }
+      throw error;
+    }
+    throw error;
+  }
+
+  private async tryAdoptFromProvider(
+    transactionId: string,
+  ): Promise<Result<TransactionView, PayTransactionError> | null> {
+    const current = await this.load(transactionId);
+    if (current === null) {
+      return null;
+    }
+    if (current.transaction.providerTransactionId !== null) {
+      return ok(buildTransactionView(current));
+    }
+    const providerTransaction = await this.paymentGateway.findByReference(
+      current.transaction.reference,
+    );
+    if (providerTransaction === null) {
+      return null;
+    }
+    await this.transactionRepository.attachProviderTransaction({
+      transactionId: current.transaction.id,
+      providerTransactionId: providerTransaction.id,
+    });
+    const adopted = await this.load(current.transaction.id);
+    if (adopted === null) {
+      return null;
+    }
+    if (!FINAL_PROVIDER_STATUSES.includes(providerTransaction.status)) {
+      return ok(buildTransactionView(adopted));
+    }
+    await this.transactionRepository.finalize({
+      transactionId: adopted.transaction.id,
+      status: providerTransaction.status as FinalizeStatus,
+      providerTransactionId: providerTransaction.id,
+      cardBrand: providerTransaction.cardBrand,
+      cardLastFour: providerTransaction.cardLastFour,
+      installments: providerTransaction.installments,
+    });
+    const refreshed = await this.load(adopted.transaction.id);
+    return ok(buildTransactionView(refreshed ?? adopted));
   }
 
   private validateInput(

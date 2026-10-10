@@ -102,6 +102,10 @@ const recordingRepository = (
     order.push('claimPayment');
     return repo.claimPayment(id, now, leaseSeconds);
   },
+  releasePaymentClaim: async (id: string) => {
+    order.push('releasePaymentClaim');
+    return repo.releasePaymentClaim(id);
+  },
   attachProviderTransaction: async (input: AttachProviderTransactionInput) => {
     order.push('attachProviderTransaction');
     return repo.attachProviderTransaction(input);

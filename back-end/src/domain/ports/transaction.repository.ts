@@ -79,6 +79,7 @@ export interface TransactionRepository {
     now: Date,
     leaseSeconds: number,
   ): Promise<boolean>;
+  releasePaymentClaim(transactionId: string): Promise<void>;
   attachProviderTransaction(
     input: AttachProviderTransactionInput,
   ): Promise<void>;
