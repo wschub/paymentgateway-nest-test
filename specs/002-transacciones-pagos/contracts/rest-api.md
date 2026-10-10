@@ -102,13 +102,20 @@ Starts the card payment for a pending purchase.
 `cardToken` is a single-use token produced by the browser; `installments` defaults to 1;
 `acceptedContracts` must be `true` (validated in the use case, not by the DTO).
 
-**202 Accepted** — the provider transaction was created and is still `PENDING`:
+**202 Accepted** — the payment is in progress; the current transaction view is returned and no second charge occurs:
 
 ```json
 { "id": "f0e1...", "status": "PENDING", "...": "same shape as the transaction view" }
 ```
 
-**200 OK** — the purchase was already final (idempotent replay) or finalized immediately.
+- The purchase is `PENDING` and the payment is **already in progress** (the claim is active or a provider
+  transaction id already exists): the current transaction view is returned, with no new provider call and no
+  second charge.
+- The purchase is `PENDING` and the payment is **started now**: the provider transaction is created once and the
+  current transaction view is returned.
+
+**200 OK** — only when the provider answers with an already final status
+(`APPROVED`, `DECLINED`, `VOIDED` or `ERROR`) at creation time; the view reflects that final status.
 
 **Errors**
 
@@ -116,7 +123,7 @@ Starts the card payment for a pending purchase.
 |--------|------|------|
 | 400 | `BAD_REQUEST` | Malformed body / missing `cardToken`. |
 | 404 | `TRANSACTION_NOT_FOUND` | Unknown purchase id. |
-| 409 | `TRANSACTION_NOT_PAYABLE` | The purchase is not `PENDING` (already paid/final). |
+| 409 | `TRANSACTION_NOT_PAYABLE` | The purchase is not `PENDING` (already approved, declined, voided or in error). |
 | 422 | `CONTRACTS_NOT_ACCEPTED` | `acceptedContracts` is not `true` (checked in the use case). |
 | 422 | `INVALID_PAYMENT_TOKEN` | The provider definitively rejected the creation with a 4xx about the token; the claim is cleared so the shopper can retry with a new token. |
 | 502 | `PAYMENT_PROVIDER_REJECTED` | Any other provider 4xx; generic message. |

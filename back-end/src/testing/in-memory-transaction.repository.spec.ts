@@ -229,7 +229,42 @@ describe('InMemoryTransactionRepository', () => {
     });
   });
 
-  describe('attachProviderTransaction', () => {
+    describe('releasePaymentClaim', () => {
+    it('clears the payment claim when no provider transaction id is stored', async () => {
+      const repository = factory(5);
+      const created = await repository.createPendingWithReservedStock(input);
+      if (created.kind !== 'created') throw new Error('expected created');
+      await repository.claimPayment(created.transaction.id, tick(0), 120);
+
+      await repository.releasePaymentClaim(created.transaction.id);
+      const details = await repository.findById(created.transaction.id);
+      expect(details?.transaction.paymentStartedAt).toBeNull();
+      expect(await repository.claimPayment(created.transaction.id, tick(5), 120)).toBe(true);
+    });
+
+    it('does not clear the claim when a provider transaction id is stored', async () => {
+      const repository = factory(5);
+      const created = await repository.createPendingWithReservedStock(input);
+      if (created.kind !== 'created') throw new Error('expected created');
+      await repository.claimPayment(created.transaction.id, tick(0), 120);
+      await repository.attachProviderTransaction({
+        transactionId: created.transaction.id,
+        providerTransactionId: 'provider-tx-7',
+      });
+
+      await repository.releasePaymentClaim(created.transaction.id);
+      const details = await repository.findById(created.transaction.id);
+      expect(details?.transaction.paymentStartedAt).not.toBeNull();
+    });
+
+    it('is idempotent for unknown or non-pending transactions', async () => {
+      const repository = factory(5);
+      await repository.releasePaymentClaim('unknown');
+      await repository.releasePaymentClaim('tx-1');
+    });
+  });
+
+describe('attachProviderTransaction', () => {
     it('records the provider transaction id', async () => {
       const repository = factory(5);
       const created = await repository.createPendingWithReservedStock(input);

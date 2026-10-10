@@ -159,6 +159,23 @@ export class InMemoryTransactionRepository implements TransactionRepository {
     return false;
   }
 
+  async releasePaymentClaim(transactionId: string): Promise<void> {
+    const transaction = this.transactions.get(transactionId);
+    if (!transaction || transaction.status !== 'PENDING') {
+      return;
+    }
+    if (transaction.providerTransactionId !== null) {
+      return;
+    }
+    this.transactions.set(
+      transactionId,
+      this.rebuild(transaction, {
+        paymentStartedAt: null,
+        updatedAt: this.clock.now(),
+      }),
+    );
+  }
+
   async attachProviderTransaction(
     input: AttachProviderTransactionInput,
   ): Promise<void> {

@@ -24,6 +24,7 @@ export interface ProviderTransaction {
   id: string;
   reference: string;
   status: ProviderTransactionStatus;
+  statusMessage: string | null;
   amountInCents: number;
   currency: string;
   cardBrand: string | null;
@@ -32,19 +33,13 @@ export interface ProviderTransaction {
   createdAt: Date | null;
 }
 
-export interface ProviderCustomer {
-  fullName: string;
-  email: string;
-  phone: string;
-}
-
 export interface CreateCardTransactionInput {
   reference: string;
   cardToken: string;
   amountInCents: number;
   currency: string;
   installments: number | null;
-  customer: ProviderCustomer;
+  customerEmail: string;
 }
 
 export interface PaymentGateway {

@@ -1,3 +1,11 @@
+import { isNonEmptyString } from '../rules/string.rules';
+import {
+  isValidIdempotencyKey,
+  isValidInstallments,
+  isValidQuantity,
+  isValidReference,
+} from '../rules/transaction.rules';
+
 export type TransactionStatus =
   | 'PENDING'
   | 'APPROVED'
@@ -45,13 +53,6 @@ const TRANSACTION_STATUSES: readonly TransactionStatus[] = [
   'ERROR',
 ];
 
-const REFERENCE_PATTERN = /^TXN-[A-Z0-9]{16}$/;
-
-const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim() !== '';
-
 export class Transaction {
   readonly id: string;
   readonly productId: string;
@@ -83,12 +84,12 @@ export class Transaction {
     if (!isNonEmptyString(props.customerId)) {
       throw new RangeError('customerId must not be empty');
     }
-    if (!REFERENCE_PATTERN.test(props.reference)) {
+    if (!isValidReference(props.reference)) {
       throw new RangeError(
         'reference must be "TXN-" followed by 16 uppercase letters or digits',
       );
     }
-    if (!IDEMPOTENCY_KEY_PATTERN.test(props.idempotencyKey)) {
+    if (!isValidIdempotencyKey(props.idempotencyKey)) {
       throw new RangeError(
         'idempotencyKey must be 16 to 64 characters of letters, digits, dash or underscore',
       );
@@ -98,7 +99,7 @@ export class Transaction {
         'status must be one of PENDING, APPROVED, DECLINED, VOIDED, ERROR',
       );
     }
-    if (!Number.isInteger(props.quantity) || props.quantity <= 0) {
+    if (!isValidQuantity(props.quantity)) {
       throw new RangeError('quantity must be a positive integer');
     }
     if (
@@ -134,7 +135,7 @@ export class Transaction {
         'providerTransactionId must be a non-empty string or null',
       );
     }
-    if (props.installments !== null && (!Number.isInteger(props.installments) || props.installments < 1)) {
+    if (props.installments !== null && !isValidInstallments(props.installments)) {
       throw new RangeError('installments must be a positive integer or null');
     }
     if (props.cardBrand !== null && !isNonEmptyString(props.cardBrand)) {

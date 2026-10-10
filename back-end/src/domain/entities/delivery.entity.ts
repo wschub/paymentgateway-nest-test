@@ -1,3 +1,11 @@
+import {
+  isValidDeliveryAddress,
+  isValidDeliveryCity,
+  isValidDeliveryNotes,
+  isValidDeliveryRegion,
+} from '../rules/delivery.rules';
+import { isNonEmptyString } from '../rules/string.rules';
+
 export type DeliveryStatus = 'PENDING' | 'ASSIGNED';
 
 export interface DeliveryProps {
@@ -24,28 +32,25 @@ export class Delivery {
   readonly assignedAt: Date | null;
 
   constructor(props: DeliveryProps) {
-    if (typeof props.id !== 'string' || props.id.trim() === '') {
+    if (!isNonEmptyString(props.id)) {
       throw new RangeError('id must not be empty');
     }
-    if (
-      typeof props.transactionId !== 'string' ||
-      props.transactionId.trim() === ''
-    ) {
+    if (!isNonEmptyString(props.transactionId)) {
       throw new RangeError('transactionId must not be empty');
     }
     if (!DELIVERY_STATUSES.includes(props.status)) {
       throw new RangeError('status must be one of PENDING, ASSIGNED');
     }
-    if (typeof props.address !== 'string' || props.address.trim() === '') {
+    if (!isValidDeliveryAddress(props.address)) {
       throw new RangeError('address must not be empty');
     }
-    if (typeof props.city !== 'string' || props.city.trim() === '') {
+    if (!isValidDeliveryCity(props.city)) {
       throw new RangeError('city must not be empty');
     }
-    if (typeof props.region !== 'string' || props.region.trim() === '') {
+    if (!isValidDeliveryRegion(props.region)) {
       throw new RangeError('region must not be empty');
     }
-    if (props.notes !== null && (typeof props.notes !== 'string' || props.notes.length > 500)) {
+    if (props.notes !== null && !isValidDeliveryNotes(props.notes)) {
       throw new RangeError('notes must be a string up to 500 characters or null');
     }
     if (props.assignedAt !== null && !(props.assignedAt instanceof Date)) {
