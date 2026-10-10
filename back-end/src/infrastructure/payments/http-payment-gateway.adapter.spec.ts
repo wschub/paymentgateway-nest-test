@@ -509,4 +509,51 @@ describe('HttpPaymentGatewayAdapter', () => {
     expect(JSON.stringify(init.headers)).not.toContain(OPTIONS.publicKey);
     expect(JSON.stringify(init.headers)).not.toContain(OPTIONS.integritySecret);
   });
+
+  it('never logs request bodies, tokens or secrets on any logger method', async () => {
+    const otherSpies = (['log', 'error', 'debug', 'verbose'] as const).map(
+      (method) =>
+        jest.spyOn(Logger.prototype, method).mockImplementation(() => undefined),
+    );
+
+    const createInput = {
+      acceptanceToken: ACCEPTANCE_TOKEN,
+      acceptPersonalAuth: PERSONAL_TOKEN,
+      reference: 'TXN-A1B2C3D4E5F6G7H8',
+      cardToken: CARD_TOKEN,
+      amountInCents: 74500,
+      currency: 'COP',
+      installments: 1,
+      customerEmail: 'diana@example.com',
+    };
+
+    const successFetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, { data: { id: 'provider-tx-9', status: 'PENDING' } }),
+    );
+    await makeAdapter(successFetch).createCardTransaction(createInput);
+
+    const tokenErrorFetch = jest
+      .fn()
+      .mockResolvedValue(jsonResponse(422, tokenErrorBody));
+    await makeAdapter(tokenErrorFetch)
+      .createCardTransaction(createInput)
+      .catch(() => undefined);
+
+    const unknownStatusFetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        data: { ...providerTransactionBody.data, status: 'WEIRD_STATE' },
+      }),
+    );
+    await makeAdapter(unknownStatusFetch).getTransaction('provider-tx-9');
+
+    const logged = [
+      ...loggerWarn.mock.calls,
+      ...otherSpies.flatMap((spy) => spy.mock.calls),
+    ];
+    const serialized = JSON.stringify(logged);
+    describeNoLeaks(logged);
+    expect(serialized).not.toContain(CARD_TOKEN);
+    expect(serialized).not.toContain('diana@example.com');
+    expect(serialized).not.toContain('74500');
+  });
 });
