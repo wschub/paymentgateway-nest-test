@@ -25,11 +25,7 @@ describe('FakePaymentGateway', () => {
     amountInCents: 74500,
     currency: 'COP',
     installments: 3,
-    customer: {
-      fullName: 'Diana Alvarez',
-      email: 'diana@example.com',
-      phone: '+57 3001234567',
-    },
+    customerEmail: 'diana@example.com',
   };
 
   it('returns the public merchant configuration', async () => {
@@ -148,5 +144,37 @@ describe('FakePaymentGateway', () => {
     const recovered = await gateway.createCardTransaction(input);
 
     expect(recovered.status).toBe('DECLINED');
+  });
+
+  it('simulates an unavailable merchant info read', async () => {
+    const gateway = new FakePaymentGateway(merchantInfo);
+    gateway.simulateMerchantUnavailable();
+
+    await expect(gateway.getMerchantInfo()).rejects.toBeInstanceOf(
+      PaymentProviderUnavailableError,
+    );
+  });
+
+  it('simulates a lost response: the provider stored the transaction but the call throws', async () => {
+    const gateway = new FakePaymentGateway(merchantInfo);
+    gateway.simulateLossAfterCreate('PENDING');
+
+    await expect(gateway.createCardTransaction(input)).rejects.toBeInstanceOf(
+      PaymentProviderUnavailableError,
+    );
+
+    const reconciled = await gateway.findByReference(input.reference);
+    expect(reconciled).not.toBeNull();
+    expect(reconciled?.status).toBe('PENDING');
+  });
+
+  it('attaches the enqueued status message to the provider transaction', async () => {
+    const gateway = new FakePaymentGateway(merchantInfo);
+    gateway.enqueueStatus('DECLINED', 'Card declined by issuer');
+
+    const created = await gateway.createCardTransaction(input);
+
+    expect(created.status).toBe('DECLINED');
+    expect(created.statusMessage).toBe('Card declined by issuer');
   });
 });

@@ -23,17 +23,14 @@ describe('PaymentGateway port', () => {
     amountInCents: 74500,
     currency: 'COP',
     installments: 3,
-    customer: {
-      fullName: 'Diana Alvarez',
-      email: 'diana@example.com',
-      phone: '+57 3001234567',
-    },
+    customerEmail: 'diana@example.com',
   };
 
   const providerTransaction: ProviderTransaction = {
     id: 'provider-tx-1',
     reference: input.reference,
     status: 'APPROVED',
+    statusMessage: null,
     amountInCents: input.amountInCents,
     currency: input.currency,
     cardBrand: 'VISA',

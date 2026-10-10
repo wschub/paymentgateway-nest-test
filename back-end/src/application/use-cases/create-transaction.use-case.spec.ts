@@ -94,6 +94,7 @@ const recordingRepository = (): TransactionRepository & {
       return { kind: 'created', transaction: buildTransaction(input) };
     },
     claimPayment: async () => false,
+    releasePaymentClaim: async () => undefined,
     attachProviderTransaction: async () => undefined,
     finalize: async () => {
       throw new Error('finalize is not used in these tests');
@@ -437,6 +438,7 @@ describe('CreateTransactionUseCase', () => {
           });
         },
         claimPayment: async () => false,
+        releasePaymentClaim: async () => undefined,
         attachProviderTransaction: async () => undefined,
         finalize: async () => {
           throw new Error('finalize is not used in these tests');
@@ -464,6 +466,7 @@ describe('CreateTransactionUseCase', () => {
           throw plainError;
         },
         claimPayment: async () => false,
+        releasePaymentClaim: async () => undefined,
         attachProviderTransaction: async () => undefined,
         finalize: async () => {
           throw new Error('finalize is not used in these tests');

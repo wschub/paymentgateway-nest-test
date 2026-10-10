@@ -1,10 +1,10 @@
 import { ContractsNotAcceptedError } from '../../domain/errors/contracts-not-accepted.error';
 import { DataAccessError } from '../../domain/errors/data-access.error';
+import { InvalidPaymentTokenError } from '../../domain/errors/invalid-payment-token.error';
 import {
   InvalidTransactionRequestError,
   type InvalidTransactionRequestField,
 } from '../../domain/errors/invalid-transaction-request.error';
-import { InvalidPaymentTokenError } from '../../domain/errors/invalid-payment-token.error';
 import { PaymentProviderRejectedError } from '../../domain/errors/payment-provider-rejected.error';
 import { PaymentProviderUnavailableError } from '../../domain/errors/payment-provider-unavailable.error';
 import { TransactionNotFoundError } from '../../domain/errors/transaction-not-found.error';
@@ -12,6 +12,7 @@ import { TransactionNotPayableError } from '../../domain/errors/transaction-not-
 import type { Clock } from '../../domain/ports/clock.port';
 import type {
   PaymentGateway,
+  ProviderTransaction,
   ProviderTransactionStatus,
 } from '../../domain/ports/payment-gateway.port';
 import type {
@@ -40,6 +41,9 @@ export type PayTransactionError =
   | ContractsNotAcceptedError
   | TransactionNotFoundError
   | TransactionNotPayableError
+  | InvalidPaymentTokenError
+  | PaymentProviderRejectedError
+  | PaymentProviderUnavailableError
   | DataAccessError;
 
 const FINAL_PROVIDER_STATUSES: readonly ProviderTransactionStatus[] = [
@@ -48,6 +52,21 @@ const FINAL_PROVIDER_STATUSES: readonly ProviderTransactionStatus[] = [
   'VOIDED',
   'ERROR',
 ];
+
+const FAILURE_REASON_MAX_LENGTH = 200;
+
+const failureReasonFor = (
+  providerTransaction: ProviderTransaction,
+): string | null | undefined => {
+  if (providerTransaction.status === 'APPROVED') {
+    return undefined;
+  }
+  const message = providerTransaction.statusMessage?.trim() ?? '';
+  if (message === '') {
+    return null;
+  }
+  return message.slice(0, FAILURE_REASON_MAX_LENGTH);
+};
 
 export class PayTransactionUseCase {
   constructor(
@@ -100,7 +119,15 @@ export class PayTransactionUseCase {
       return ok(buildTransactionView(details));
     }
 
-    const merchantInfo = await this.paymentGateway.getMerchantInfo();
+    let merchantInfo;
+    try {
+      merchantInfo = await this.paymentGateway.getMerchantInfo();
+    } catch (error) {
+      if (error instanceof PaymentProviderUnavailableError) {
+        return err(error);
+      }
+      throw error;
+    }
     if (installments > merchantInfo.installments.max) {
       return err(new InvalidTransactionRequestError(['installments']));
     }
@@ -111,7 +138,7 @@ export class PayTransactionUseCase {
       this.config.paymentClaimLeaseSeconds,
     );
     if (!claimed) {
-      return this.respondWithCurrentView(input.transactionId);
+      return this.respondWhileClaimedByOthers(input.transactionId);
     }
 
     let providerTransaction = await this.paymentGateway.findByReference(
@@ -125,45 +152,92 @@ export class PayTransactionUseCase {
           amountInCents: details.transaction.totalInCents,
           currency: this.config.currency,
           installments,
-          customer: {
-            fullName: details.customer.fullName,
-            email: details.customer.email,
-            phone: details.customer.phone,
-          },
+          customerEmail: details.customer.email,
         });
       } catch (error) {
-        return await this.handleGatewayFailure(error, details.transaction.id);
+        return this.handleCreateFailure(error, input.transactionId);
       }
     }
 
+    return this.continueWithProviderTransaction(details, providerTransaction);
+  }
+
+  private async continueWithProviderTransaction(
+    details: TransactionDetails,
+    providerTransaction: ProviderTransaction,
+  ): Promise<Result<TransactionView, PayTransactionError>> {
     await this.transactionRepository.attachProviderTransaction({
       transactionId: details.transaction.id,
       providerTransactionId: providerTransaction.id,
     });
 
     if (!FINAL_PROVIDER_STATUSES.includes(providerTransaction.status)) {
-      return ok(buildTransactionView(details));
+      const fresh = await this.load(details.transaction.id);
+      if (fresh === null) {
+        return err(new TransactionNotFoundError(details.transaction.id));
+      }
+      return ok(buildTransactionView(fresh));
     }
 
-    const finalized = await this.transactionRepository.finalize({
+    await this.transactionRepository.finalize({
       transactionId: details.transaction.id,
       status: providerTransaction.status as FinalizeStatus,
       providerTransactionId: providerTransaction.id,
       cardBrand: providerTransaction.cardBrand,
       cardLastFour: providerTransaction.cardLastFour,
       installments: providerTransaction.installments,
+      failureReason: failureReasonFor(providerTransaction),
     });
-    const refreshed = await this.transactionRepository.findById(
-      details.transaction.id,
-    );
-    return ok(
-      buildTransactionView(
-        refreshed ?? { ...details, transaction: finalized.transaction },
-      ),
-    );
+
+    const refreshed = await this.load(details.transaction.id);
+    if (refreshed === null) {
+      return err(new TransactionNotFoundError(details.transaction.id));
+    }
+    return ok(buildTransactionView(refreshed));
   }
 
-  private async respondWithCurrentView(
+  private async handleCreateFailure(
+    error: unknown,
+    transactionId: string,
+  ): Promise<Result<TransactionView, PayTransactionError>> {
+    if (error instanceof InvalidPaymentTokenError) {
+      await this.transactionRepository.releasePaymentClaim(transactionId);
+      return err(error);
+    }
+    if (error instanceof PaymentProviderRejectedError) {
+      await this.transactionRepository.releasePaymentClaim(transactionId);
+      return err(error);
+    }
+    if (error instanceof PaymentProviderUnavailableError) {
+      const adopted = await this.reconcileAfterUnavailable(transactionId);
+      if (adopted !== null) {
+        return adopted;
+      }
+      return err(error);
+    }
+    throw error;
+  }
+
+  private async reconcileAfterUnavailable(
+    transactionId: string,
+  ): Promise<Result<TransactionView, PayTransactionError> | null> {
+    const current = await this.load(transactionId);
+    if (current === null) {
+      return err(new TransactionNotFoundError(transactionId));
+    }
+    if (current.transaction.providerTransactionId !== null) {
+      return ok(buildTransactionView(current));
+    }
+    const stored = await this.paymentGateway.findByReference(
+      current.transaction.reference,
+    );
+    if (stored === null) {
+      return null;
+    }
+    return this.continueWithProviderTransaction(current, stored);
+  }
+
+  private async respondWhileClaimedByOthers(
     transactionId: string,
   ): Promise<Result<TransactionView, PayTransactionError>> {
     const current = await this.load(transactionId);
@@ -173,90 +247,19 @@ export class PayTransactionUseCase {
     if (current.transaction.providerTransactionId !== null) {
       return ok(buildTransactionView(current));
     }
-
-    const providerTransaction = await this.paymentGateway.findByReference(
+    const stored = await this.paymentGateway.findByReference(
       current.transaction.reference,
     );
-    if (providerTransaction === null) {
+    if (stored === null) {
       return ok(buildTransactionView(current));
     }
-
-    await this.transactionRepository.attachProviderTransaction({
-      transactionId: current.transaction.id,
-      providerTransactionId: providerTransaction.id,
-    });
-    const adopted = await this.load(transactionId);
-    if (adopted === null) {
-      return err(new TransactionNotFoundError(transactionId));
-    }
-    return ok(buildTransactionView(adopted));
+    return this.continueWithProviderTransaction(current, stored);
   }
 
   private async load(
     transactionId: string,
   ): Promise<TransactionDetails | null> {
     return this.transactionRepository.findById(transactionId);
-  }
-
-  private async handleGatewayFailure(
-    error: unknown,
-    transactionId: string,
-  ): Promise<Result<TransactionView, PayTransactionError>> {
-    if (error instanceof InvalidPaymentTokenError) {
-      await this.transactionRepository.releasePaymentClaim(transactionId);
-      throw error;
-    }
-    if (error instanceof PaymentProviderRejectedError) {
-      await this.transactionRepository.releasePaymentClaim(transactionId);
-      throw error;
-    }
-    if (error instanceof PaymentProviderUnavailableError) {
-      const adopted = await this.tryAdoptFromProvider(transactionId);
-      if (adopted !== null) {
-        return adopted;
-      }
-      throw error;
-    }
-    throw error;
-  }
-
-  private async tryAdoptFromProvider(
-    transactionId: string,
-  ): Promise<Result<TransactionView, PayTransactionError> | null> {
-    const current = await this.load(transactionId);
-    if (current === null) {
-      return null;
-    }
-    if (current.transaction.providerTransactionId !== null) {
-      return ok(buildTransactionView(current));
-    }
-    const providerTransaction = await this.paymentGateway.findByReference(
-      current.transaction.reference,
-    );
-    if (providerTransaction === null) {
-      return null;
-    }
-    await this.transactionRepository.attachProviderTransaction({
-      transactionId: current.transaction.id,
-      providerTransactionId: providerTransaction.id,
-    });
-    const adopted = await this.load(current.transaction.id);
-    if (adopted === null) {
-      return null;
-    }
-    if (!FINAL_PROVIDER_STATUSES.includes(providerTransaction.status)) {
-      return ok(buildTransactionView(adopted));
-    }
-    await this.transactionRepository.finalize({
-      transactionId: adopted.transaction.id,
-      status: providerTransaction.status as FinalizeStatus,
-      providerTransactionId: providerTransaction.id,
-      cardBrand: providerTransaction.cardBrand,
-      cardLastFour: providerTransaction.cardLastFour,
-      installments: providerTransaction.installments,
-    });
-    const refreshed = await this.load(adopted.transaction.id);
-    return ok(buildTransactionView(refreshed ?? adopted));
   }
 
   private validateInput(

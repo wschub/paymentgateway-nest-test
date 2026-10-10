@@ -10,8 +10,9 @@ import type {
 } from '../domain/ports/payment-gateway.port';
 
 export type FakeCreateBehavior =
-  | { kind: 'status'; status: ProviderTransactionStatus }
+  | { kind: 'status'; status: ProviderTransactionStatus; statusMessage: string | null }
   | { kind: 'timeout' }
+  | { kind: 'timeout_after_create'; status: ProviderTransactionStatus; statusMessage: string | null }
   | { kind: 'token_rejected' }
   | { kind: 'other_4xx' }
   | { kind: 'server_error' };
@@ -32,15 +33,30 @@ export class FakePaymentGateway implements PaymentGateway {
   >();
   private readonly calls: RecordedGatewayCall[] = [];
   private idCounter = 0;
+  private merchantInfoUnavailable = false;
 
   constructor(private readonly merchantInfo: MerchantInfo) {}
 
-  enqueueStatus(status: ProviderTransactionStatus): void {
-    this.nextCreateBehaviors.push({ kind: 'status', status });
+  enqueueStatus(
+    status: ProviderTransactionStatus,
+    statusMessage: string | null = null,
+  ): void {
+    this.nextCreateBehaviors.push({ kind: 'status', status, statusMessage });
   }
 
   simulateTimeout(): void {
     this.nextCreateBehaviors.push({ kind: 'timeout' });
+  }
+
+  simulateLossAfterCreate(
+    status: ProviderTransactionStatus = 'PENDING',
+    statusMessage: string | null = null,
+  ): void {
+    this.nextCreateBehaviors.push({
+      kind: 'timeout_after_create',
+      status,
+      statusMessage,
+    });
   }
 
   simulateTokenRejected(): void {
@@ -55,12 +71,19 @@ export class FakePaymentGateway implements PaymentGateway {
     this.nextCreateBehaviors.push({ kind: 'server_error' });
   }
 
+  simulateMerchantUnavailable(): void {
+    this.merchantInfoUnavailable = true;
+  }
+
   recordedCalls(): readonly RecordedGatewayCall[] {
     return [...this.calls];
   }
 
   async getMerchantInfo(): Promise<MerchantInfo> {
     this.calls.push({ method: 'getMerchantInfo' });
+    if (this.merchantInfoUnavailable) {
+      throw new PaymentProviderUnavailableError();
+    }
     return this.merchantInfo;
   }
 
@@ -70,7 +93,11 @@ export class FakePaymentGateway implements PaymentGateway {
     this.calls.push({ method: 'createCardTransaction', input });
 
     const behavior =
-      this.nextCreateBehaviors.shift() ?? { kind: 'status', status: 'APPROVED' as const };
+      this.nextCreateBehaviors.shift() ?? {
+        kind: 'status' as const,
+        status: 'APPROVED' as const,
+        statusMessage: null,
+      };
 
     switch (behavior.kind) {
       case 'timeout':
@@ -82,10 +109,22 @@ export class FakePaymentGateway implements PaymentGateway {
       case 'server_error':
         throw new PaymentProviderUnavailableError();
       case 'status': {
-        const transaction = this.buildProviderTransaction(input, behavior.status);
-        this.transactionsById.set(transaction.id, transaction);
-        this.transactionsByReference.set(transaction.reference, transaction);
+        const transaction = this.buildProviderTransaction(
+          input,
+          behavior.status,
+          behavior.statusMessage,
+        );
+        this.store(transaction);
         return transaction;
+      }
+      case 'timeout_after_create': {
+        const transaction = this.buildProviderTransaction(
+          input,
+          behavior.status,
+          behavior.statusMessage,
+        );
+        this.store(transaction);
+        throw new PaymentProviderUnavailableError();
       }
     }
   }
@@ -103,11 +142,13 @@ export class FakePaymentGateway implements PaymentGateway {
   private buildProviderTransaction(
     input: CreateCardTransactionInput,
     status: ProviderTransactionStatus,
+    statusMessage: string | null,
   ): ProviderTransaction {
     return {
       id: `provider-tx-${++this.idCounter}`,
       reference: input.reference,
       status,
+      statusMessage,
       amountInCents: input.amountInCents,
       currency: input.currency,
       cardBrand: 'VISA',
@@ -115,5 +156,10 @@ export class FakePaymentGateway implements PaymentGateway {
       installments: input.installments,
       createdAt: new Date('2026-10-09T10:01:00.000Z'),
     };
+  }
+
+  private store(transaction: ProviderTransaction): void {
+    this.transactionsById.set(transaction.id, transaction);
+    this.transactionsByReference.set(transaction.reference, transaction);
   }
 }

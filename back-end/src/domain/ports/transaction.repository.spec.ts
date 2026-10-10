@@ -66,6 +66,7 @@ describe('TransactionRepository port', () => {
     releaseExpiredReservations: async () => 0,
     createPendingWithReservedStock: async () => ({ kind: 'created', transaction }),
     claimPayment: async () => true,
+    releasePaymentClaim: async () => undefined,
     attachProviderTransaction: async () => undefined,
     finalize: async () => ({ finalized: false, transaction }),
   };
