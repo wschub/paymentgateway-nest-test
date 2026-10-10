@@ -157,6 +157,7 @@ export class PrismaTransactionRepository implements TransactionRepository {
         where: {
           id: transactionId,
           status: 'PENDING',
+          providerTransactionId: null,
           OR: [
             { paymentStartedAt: null },
             { paymentStartedAt: { lt: staleBefore } },
@@ -260,6 +261,8 @@ export class PrismaTransactionRepository implements TransactionRepository {
           createdAt: { lt: cutoff },
         },
         select: { id: true, productId: true, quantity: true },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
       });
 
       let released = 0;

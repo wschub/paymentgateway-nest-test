@@ -325,6 +325,28 @@ describe('PrismaTransactionRepository', () => {
       });
     });
 
+    it('wraps unexpected failures into DataAccessError when the P2002 collision is not the idempotency key', async () => {
+      const { prisma, tx, transactionFindUnique } = buildPrisma();
+      const cause = uniqueViolation();
+      tx.product.updateMany.mockResolvedValue({ count: 1 });
+      tx.customer.create.mockResolvedValue(customerRow);
+      tx.transaction.create.mockRejectedValue(cause);
+      transactionFindUnique.mockResolvedValue(null);
+      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+
+      try {
+        await repository.createPendingWithReservedStock(createInput);
+        throw new Error('expected rejection');
+      } catch (error) {
+        expect(error).toBeInstanceOf(DataAccessError);
+        expect((error as DataAccessError).message).toBe(
+          'Unable to create the transaction',
+        );
+        expect((error as DataAccessError).message).not.toContain('P2002');
+        expect((error as DataAccessError).cause).toBe(cause);
+      }
+    });
+
     it('wraps unexpected failures into DataAccessError without copying the message', async () => {
       const { prisma, tx } = buildPrisma();
       const cause = new Error('P1008 timeout exceeded');
@@ -356,6 +378,7 @@ describe('PrismaTransactionRepository', () => {
         where: {
           id: TRANSACTION_ID,
           status: 'PENDING',
+          providerTransactionId: null,
           OR: [
             { paymentStartedAt: null },
             {
@@ -367,6 +390,18 @@ describe('PrismaTransactionRepository', () => {
         },
         data: { paymentStartedAt: claimAt, updatedAt: FIXTURE_NOW },
       });
+    });
+
+    it('returns false when the purchase already has a provider transaction', async () => {
+      const { prisma, tx } = buildPrisma();
+      tx.transaction.updateMany.mockResolvedValue({ count: 0 });
+      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+
+      const claimed = await repository.claimPayment(TRANSACTION_ID, FIXTURE_NOW, 120);
+
+      expect(claimed).toBe(false);
+      const call = tx.transaction.updateMany.mock.calls[0][0];
+      expect(call.where.providerTransactionId).toBeNull();
     });
 
     it('returns false when no row changes', async () => {
@@ -552,6 +587,8 @@ describe('PrismaTransactionRepository', () => {
           createdAt: { lt: new Date(now.getTime() - 900 * 1000) },
         },
         select: { id: true, productId: true, quantity: true },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
       });
       expect($transaction).toHaveBeenCalledTimes(1);
       expect(tx.transaction.updateMany).toHaveBeenCalledWith({
