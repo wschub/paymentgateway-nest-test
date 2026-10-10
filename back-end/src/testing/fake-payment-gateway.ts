@@ -82,7 +82,7 @@ export class FakePaymentGateway implements PaymentGateway {
   async getMerchantInfo(): Promise<MerchantInfo> {
     this.calls.push({ method: 'getMerchantInfo' });
     if (this.merchantInfoUnavailable) {
-      throw new PaymentProviderUnavailableError();
+      throw new PaymentProviderUnavailableError('network');
     }
     return this.merchantInfo;
   }
@@ -101,13 +101,13 @@ export class FakePaymentGateway implements PaymentGateway {
 
     switch (behavior.kind) {
       case 'timeout':
-        throw new PaymentProviderUnavailableError();
+        throw new PaymentProviderUnavailableError('timeout');
       case 'token_rejected':
         throw new InvalidPaymentTokenError();
       case 'other_4xx':
-        throw new PaymentProviderRejectedError();
+        throw new PaymentProviderRejectedError(422);
       case 'server_error':
-        throw new PaymentProviderUnavailableError();
+        throw new PaymentProviderUnavailableError('http_5xx', 500);
       case 'status': {
         const transaction = this.buildProviderTransaction(
           input,
@@ -124,14 +124,18 @@ export class FakePaymentGateway implements PaymentGateway {
           behavior.statusMessage,
         );
         this.store(transaction);
-        throw new PaymentProviderUnavailableError();
+        throw new PaymentProviderUnavailableError('timeout');
       }
     }
   }
 
-  async getTransaction(id: string): Promise<ProviderTransaction | null> {
+  async getTransaction(id: string): Promise<ProviderTransaction> {
     this.calls.push({ method: 'getTransaction', id });
-    return this.transactionsById.get(id) ?? null;
+    const transaction = this.transactionsById.get(id);
+    if (transaction === undefined) {
+      throw new PaymentProviderRejectedError(404);
+    }
+    return transaction;
   }
 
   async findByReference(reference: string): Promise<ProviderTransaction | null> {
