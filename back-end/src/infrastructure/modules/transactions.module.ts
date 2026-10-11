@@ -36,14 +36,9 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
       useFactory: (
         prisma: PrismaService,
         clock: Clock,
-        config: ConfigService,
       ): TransactionRepository =>
-        new PrismaTransactionRepository(
-          prisma,
-          clock,
-          config.getOrThrow<number>('RESERVATION_TTL_SECONDS'),
-        ),
-      inject: [PrismaService, CLOCK, ConfigService],
+        new PrismaTransactionRepository(prisma, clock),
+      inject: [PrismaService, CLOCK],
     },
     {
       // Secrets (private key, integrity secret) are read only inside this
@@ -80,6 +75,9 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
         paymentClaimLeaseSeconds: config.getOrThrow<number>(
           'PAYMENT_CLAIM_LEASE_SECONDS',
         ),
+        reservationTtlSeconds: config.getOrThrow<number>(
+          'RESERVATION_TTL_SECONDS',
+        ),
       }),
       inject: [ConfigService],
     },
@@ -91,6 +89,7 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
         fees: FeesConfig,
         clock: Clock,
         referenceGenerator: ReferenceGenerator,
+        config: AppConfigValues,
       ) =>
         new CreateTransactionUseCase(
           products,
@@ -98,6 +97,7 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
           fees,
           clock,
           referenceGenerator,
+          config,
         ),
       inject: [
         PRODUCTS_REPOSITORY,
@@ -105,6 +105,7 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
         FEES_CONFIG,
         CLOCK,
         REFERENCE_GENERATOR,
+        APP_CONFIG_VALUES,
       ],
     },
     {
@@ -112,8 +113,15 @@ import { PRODUCTS_REPOSITORY, ProductsModule } from './products.module';
       useFactory: (
         transactions: TransactionRepository,
         gateway: PaymentGateway,
-      ) => new GetTransactionUseCase(transactions, gateway),
-      inject: [TRANSACTION_REPOSITORY, PAYMENT_GATEWAY],
+        clock: Clock,
+        config: AppConfigValues,
+      ) => new GetTransactionUseCase(transactions, gateway, clock, config),
+      inject: [
+        TRANSACTION_REPOSITORY,
+        PAYMENT_GATEWAY,
+        CLOCK,
+        APP_CONFIG_VALUES,
+      ],
     },
   ],
   exports: [

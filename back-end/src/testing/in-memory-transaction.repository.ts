@@ -35,7 +35,6 @@ export class InMemoryTransactionRepository implements TransactionRepository {
   constructor(
     private readonly clock: Clock,
     source: ReadonlyMap<string, SeededProduct> | InMemoryProductStore = new Map(),
-    private readonly reservationTtlSeconds = 900,
   ) {
     if (source instanceof InMemoryProductStore) {
       this.store = source;
@@ -54,7 +53,10 @@ export class InMemoryTransactionRepository implements TransactionRepository {
     return this.toDetails(this.byIdempotencyKey.get(key));
   }
 
-  async releaseExpiredReservations(now: Date): Promise<number> {
+  async releaseExpiredReservations(
+    now: Date,
+    ttlSeconds: number,
+  ): Promise<number> {
     let released = 0;
     for (const transaction of this.transactions.values()) {
       if (
@@ -63,8 +65,7 @@ export class InMemoryTransactionRepository implements TransactionRepository {
       ) {
         continue;
       }
-      const expiredAt = transaction.createdAt.getTime() +
-        this.reservationTtlSeconds * 1000;
+      const expiredAt = transaction.createdAt.getTime() + ttlSeconds * 1000;
       if (expiredAt >= now.getTime()) {
         continue;
       }

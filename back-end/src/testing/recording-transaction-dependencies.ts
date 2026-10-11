@@ -20,8 +20,8 @@ export const recordingTransactionRepository = (
     return repo.findById(id);
   },
   findByIdempotencyKey: async (key: string) => repo.findByIdempotencyKey(key),
-  releaseExpiredReservations: async (now: Date) =>
-    repo.releaseExpiredReservations(now),
+  releaseExpiredReservations: async (now: Date, ttlSeconds: number) =>
+    repo.releaseExpiredReservations(now, ttlSeconds),
   createPendingWithReservedStock: async (
     input: CreatePendingWithReservedStockInput,
   ) => repo.createPendingWithReservedStock(input),

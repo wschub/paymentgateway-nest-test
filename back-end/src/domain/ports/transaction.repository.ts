@@ -70,7 +70,7 @@ export interface FinalizeResult {
 export interface TransactionRepository {
   findById(id: string): Promise<TransactionDetails | null>;
   findByIdempotencyKey(key: string): Promise<TransactionDetails | null>;
-  releaseExpiredReservations(now: Date): Promise<number>;
+  releaseExpiredReservations(now: Date, ttlSeconds: number): Promise<number>;
   createPendingWithReservedStock(
     input: CreatePendingWithReservedStockInput,
   ): Promise<CreatePendingWithReservedStockResult>;

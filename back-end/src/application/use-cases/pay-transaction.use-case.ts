@@ -1,3 +1,4 @@
+import type { Transaction } from '../../domain/entities/transaction.entity';
 import { ContractsNotAcceptedError } from '../../domain/errors/contracts-not-accepted.error';
 import { DataAccessError } from '../../domain/errors/data-access.error';
 import { InvalidPaymentTokenError } from '../../domain/errors/invalid-payment-token.error';
@@ -81,12 +82,28 @@ export class PayTransactionUseCase {
     }
     const installments = input.installments ?? MIN_INSTALLMENTS;
 
-    const details = await this.transactionRepository.findById(
+    const found = await this.transactionRepository.findById(
       input.transactionId,
     );
-    if (details === null) {
+    if (found === null) {
       return err(new TransactionNotFoundError(input.transactionId));
     }
+
+    let details = found;
+    if (this.isExpiredUnstartedReservation(details.transaction)) {
+      await this.transactionRepository.releaseExpiredReservations(
+        this.clock.now(),
+        this.config.reservationTtlSeconds,
+      );
+      const reloaded = await this.transactionRepository.findById(
+        input.transactionId,
+      );
+      if (reloaded === null) {
+        return err(new TransactionNotFoundError(input.transactionId));
+      }
+      details = reloaded;
+    }
+
     if (details.transaction.status !== 'PENDING') {
       return err(
         new TransactionNotPayableError(
@@ -236,6 +253,17 @@ export class PayTransactionUseCase {
     transactionId: string,
   ): Promise<TransactionDetails | null> {
     return this.transactionRepository.findById(transactionId);
+  }
+
+  private isExpiredUnstartedReservation(transaction: Transaction): boolean {
+    if (
+      transaction.status !== 'PENDING' ||
+      transaction.paymentStartedAt !== null
+    ) {
+      return false;
+    }
+    const ageMs = this.clock.now().getTime() - transaction.createdAt.getTime();
+    return ageMs > this.config.reservationTtlSeconds * 1000;
   }
 
   private validateInput(

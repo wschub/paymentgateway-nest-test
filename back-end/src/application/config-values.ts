@@ -3,4 +3,5 @@ export interface AppConfigValues {
   baseUrl: string;
   currency: string;
   paymentClaimLeaseSeconds: number;
+  reservationTtlSeconds: number;
 }

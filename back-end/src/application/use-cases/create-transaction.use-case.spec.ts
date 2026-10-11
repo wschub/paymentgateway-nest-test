@@ -5,6 +5,7 @@ import { IdempotencyReplayNotSupportedError } from '../../domain/errors/idempote
 import { InsufficientStockError } from '../../domain/errors/insufficient-stock.error';
 import { InvalidTransactionRequestError } from '../../domain/errors/invalid-transaction-request.error';
 import { ProductNotFoundError } from '../../domain/errors/product-not-found.error';
+import type { Clock } from '../../domain/ports/clock.port';
 import type { ProductRepository } from '../../domain/ports/product.repository';
 import type {
   CreatePendingWithReservedStockInput,
@@ -12,7 +13,9 @@ import type {
 } from '../../domain/ports/transaction.repository';
 import { FeesConfig } from '../../domain/value-objects/fees-config';
 import { InMemoryProductRepository } from '../../testing/in-memory-product.repository';
+import { InMemoryProductStore } from '../../testing/in-memory-product-store';
 import { InMemoryTransactionRepository } from '../../testing/in-memory-transaction.repository';
+import type { AppConfigValues } from '../config-values';
 import {
   CreateTransactionUseCase,
   type CreateTransactionInput,
@@ -20,6 +23,14 @@ import {
 
 const FIXED_REFERENCE = 'TXN-A1B2C3D4E5F6G7H8';
 const FIXED_NOW = new Date('2026-10-09T10:00:00.000Z');
+
+const config: AppConfigValues = {
+  publicKey: 'pub_test_config_key',
+  baseUrl: 'https://pay.example.test/v1',
+  currency: 'COP',
+  paymentClaimLeaseSeconds: 120,
+  reservationTtlSeconds: 900,
+};
 
 const product = new Product({
   id: '11111111-1111-4111-8111-111111111111',
@@ -114,6 +125,7 @@ describe('CreateTransactionUseCase', () => {
       feesConfig,
       clock,
       referenceGenerator,
+      config,
     );
 
   const inMemoryRepository = () =>
@@ -474,9 +486,120 @@ describe('CreateTransactionUseCase', () => {
         },
       };
 
-      await expect(useCaseWith(failing).execute(validInput())).rejects.toBe(
+    await expect(useCaseWith(failing).execute(validInput())).rejects.toBe(
+      plainError,
+    );
+  });
+
+  describe('reservation expiry sweep', () => {
+    const stubRepository = (
+      overrides: Partial<TransactionRepository> = {},
+    ): TransactionRepository => ({
+      findById: async () => null,
+      findByIdempotencyKey: async () => null,
+      releaseExpiredReservations: async () => 0,
+      createPendingWithReservedStock: async (input) => ({
+        kind: 'created',
+        transaction: buildTransaction(input),
+      }),
+      claimPayment: async () => false,
+      releasePaymentClaim: async () => undefined,
+      attachProviderTransaction: async () => undefined,
+      finalize: async () => {
+        throw new Error('finalize is not used in these tests');
+      },
+      ...overrides,
+    });
+
+    it('sweeps expired reservations with the clock now and the configured ttl before reserving', async () => {
+      const sweeps: Array<{ now: Date; ttl: number }> = [];
+      let reservedAfterSweep = false;
+      const repository = stubRepository({
+        releaseExpiredReservations: async (now, ttl) => {
+          sweeps.push({ now, ttl });
+          return 0;
+        },
+        createPendingWithReservedStock: async (input) => {
+          reservedAfterSweep = sweeps.length === 1;
+          return { kind: 'created', transaction: buildTransaction(input) };
+        },
+      });
+
+      const result = await useCaseWith(repository).execute(validInput());
+
+      expect(sweeps).toEqual([{ now: FIXED_NOW, ttl: 900 }]);
+      expect(reservedAfterSweep).toBe(true);
+      expect(result.ok).toBe(true);
+    });
+
+    it('swallows a DataAccessError raised by the sweep and still creates the purchase', async () => {
+      const repository = stubRepository({
+        releaseExpiredReservations: async () => {
+          throw new DataAccessError('Reservation sweep failed');
+        },
+      });
+
+      const result = await useCaseWith(repository).execute(validInput());
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('rethrows an error that is not a DataAccessError from the sweep', async () => {
+      const plainError = new Error('sweep exploded');
+      const repository = stubRepository({
+        releaseExpiredReservations: async () => {
+          throw plainError;
+        },
+      });
+
+      await expect(useCaseWith(repository).execute(validInput())).rejects.toBe(
         plainError,
       );
     });
+
+    it('reserves the last unit again once an abandoned reservation expires', async () => {
+      let current = FIXED_NOW;
+      const mutableClock: Clock = { now: () => current };
+      const store = new InMemoryProductStore([
+        new Product({
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          priceInCents: product.priceInCents,
+          stock: 1,
+          imageUrl: product.imageUrl,
+          createdAt: product.createdAt,
+          updatedAt: product.updatedAt,
+        }),
+      ]);
+      const repo = new InMemoryTransactionRepository(mutableClock, store);
+      let counter = 0;
+      const references = {
+        newReference: () => `TXN-${String(++counter).padStart(16, '0')}`,
+      };
+      const useCase = new CreateTransactionUseCase(
+        new InMemoryProductRepository([product]),
+        repo,
+        feesConfig,
+        mutableClock,
+        references,
+        config,
+      );
+
+      const first = await useCase.execute({ ...validInput(), quantity: 1 });
+      expect(first.ok).toBe(true);
+      expect(store.findById(product.id)?.stock).toBe(0);
+
+      current = new Date(current.getTime() + 901 * 1000);
+      const second = await useCase.execute({
+        ...validInput(),
+        quantity: 1,
+        idempotencyKey: 'order_0002_abcdefgh',
+      });
+
+      expect(second.ok).toBe(true);
+      expect(store.findById(product.id)?.stock).toBe(0);
+    });
   });
+});
 });

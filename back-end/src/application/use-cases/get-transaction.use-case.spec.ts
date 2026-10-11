@@ -1,3 +1,4 @@
+import { Product } from '../../domain/entities/product.entity';
 import { PaymentProviderRejectedError } from '../../domain/errors/payment-provider-rejected.error';
 import { PaymentProviderUnavailableError } from '../../domain/errors/payment-provider-unavailable.error';
 import { TransactionNotFoundError } from '../../domain/errors/transaction-not-found.error';
@@ -8,16 +9,28 @@ import type {
   PaymentGateway,
 } from '../../domain/ports/payment-gateway.port';
 import { FakePaymentGateway } from '../../testing/fake-payment-gateway';
+import { InMemoryProductStore } from '../../testing/in-memory-product-store';
 import { InMemoryTransactionRepository } from '../../testing/in-memory-transaction.repository';
 import {
   recordingPaymentGateway,
   recordingTransactionRepository,
 } from '../../testing/recording-transaction-dependencies';
+import type { AppConfigValues } from '../config-values';
 import { GetTransactionUseCase } from './get-transaction.use-case';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 const FIXED_REFERENCE = 'TXN-A1B2C3D4E5F6G7H8';
 const FIXED_NOW = new Date('2026-10-09T10:00:00.000Z');
+
+const config: AppConfigValues = {
+  publicKey: 'pub_test_config_key',
+  baseUrl: 'https://pay.example.test/v1',
+  currency: 'COP',
+  paymentClaimLeaseSeconds: 120,
+  reservationTtlSeconds: 900,
+};
+
+const clock: Clock = { now: () => FIXED_NOW };
 
 const merchantInfo: MerchantInfo = {
   acceptanceToken: 'tok_acceptance_test',
@@ -49,11 +62,10 @@ const setup = async (): Promise<{
   transactionId: string;
 }> => {
   const order: string[] = [];
-  const clock: Clock = { now: () => FIXED_NOW };
   const products = new Map<string, { name: string; stock: number }>([
     [PRODUCT_ID, { name: 'Wireless Mouse', stock: 5 }],
   ]);
-  const repo = new InMemoryTransactionRepository(clock, products, 900);
+  const repo = new InMemoryTransactionRepository(clock, products);
   const gateway = new FakePaymentGateway(merchantInfo);
   const created = await repo.createPendingWithReservedStock({
     productId: PRODUCT_ID,
@@ -83,6 +95,8 @@ const setup = async (): Promise<{
   const useCase = new GetTransactionUseCase(
     recordingTransactionRepository(repo, order),
     recordingPaymentGateway(gateway, order),
+    clock,
+    config,
   );
   return {
     useCase,
@@ -98,7 +112,7 @@ const claimWithProviderTransaction = async (
   repo: InMemoryTransactionRepository,
   gateway: FakePaymentGateway,
   transactionId: string,
-  status: 'APPROVED' | 'DECLINED' | 'PENDING' | 'UNKNOWN',
+  status: 'APPROVED' | 'DECLINED' | 'VOIDED' | 'ERROR' | 'PENDING' | 'UNKNOWN',
   statusMessage: string | null = null,
 ): Promise<string> => {
   gateway.enqueueStatus(status, statusMessage);
@@ -115,7 +129,7 @@ const claimWithoutProviderTransaction = async (
   repo: InMemoryTransactionRepository,
   gateway: FakePaymentGateway,
   transactionId: string,
-  status: 'APPROVED' | 'DECLINED' | 'PENDING' | 'UNKNOWN',
+  status: 'APPROVED' | 'DECLINED' | 'VOIDED' | 'ERROR' | 'PENDING' | 'UNKNOWN',
   statusMessage: string | null = null,
 ): Promise<void> => {
   gateway.enqueueStatus(status, statusMessage);
@@ -209,6 +223,68 @@ describe('GetTransactionUseCase', () => {
     expect(result.value.failureReason).toBe('Card declined by issuer');
     expect(result.value.delivery).toMatchObject({ status: 'PENDING' });
     expect(products.get(PRODUCT_ID)?.stock).toBe(5);
+  });
+
+  it('releases the reserved stock exactly once and assigns no delivery when voided', async () => {
+    const { useCase, repo, gateway, products, transactionId } = await setup();
+    await claimWithProviderTransaction(
+      repo,
+      gateway,
+      transactionId,
+      'VOIDED',
+      'Voided by the provider',
+    );
+
+    const [first, second] = await Promise.all([
+      useCase.execute(transactionId),
+      useCase.execute(transactionId),
+    ]);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (first.ok) {
+      expect(first.value.status).toBe('VOIDED');
+      expect(first.value.failureReason).toBe('Voided by the provider');
+      expect(first.value.delivery).toMatchObject({ status: 'PENDING' });
+    }
+    expect(products.get(PRODUCT_ID)?.stock).toBe(5);
+  });
+
+  it('releases the reserved stock and assigns no delivery when the payment ends in error', async () => {
+    const { useCase, repo, gateway, products, transactionId } = await setup();
+    await claimWithProviderTransaction(
+      repo,
+      gateway,
+      transactionId,
+      'ERROR',
+      'Provider error',
+    );
+
+    const result = await useCase.execute(transactionId);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.status).toBe('ERROR');
+    expect(result.value.failureReason).toBe('Provider error');
+    expect(result.value.delivery).toMatchObject({ status: 'PENDING' });
+    expect(products.get(PRODUCT_ID)?.stock).toBe(5);
+  });
+
+  it('keeps the reserved stock decremented when approved', async () => {
+    const { useCase, repo, gateway, products, transactionId } = await setup();
+    await claimWithProviderTransaction(repo, gateway, transactionId, 'APPROVED');
+
+    const result = await useCase.execute(transactionId);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.status).toBe('APPROVED');
+    expect(result.value.delivery).toMatchObject({ status: 'ASSIGNED' });
+    expect(products.get(PRODUCT_ID)?.stock).toBe(3);
   });
 
   it('keeps the stored view PENDING when the provider status is still not final', async () => {
@@ -350,6 +426,8 @@ describe('GetTransactionUseCase', () => {
     const useCaseWithFailure = new GetTransactionUseCase(
       recordingTransactionRepository(repo, []),
       failing,
+      clock,
+      config,
     );
 
     const result = await useCaseWithFailure.execute(transactionId);
@@ -374,6 +452,8 @@ describe('GetTransactionUseCase', () => {
     const useCaseWithFailure = new GetTransactionUseCase(
       recordingTransactionRepository(repo, []),
       failing,
+      clock,
+      config,
     );
 
     const result = await useCaseWithFailure.execute(transactionId);
@@ -402,6 +482,8 @@ describe('GetTransactionUseCase', () => {
     const useCaseWithFailure = new GetTransactionUseCase(
       recordingTransactionRepository(repo, []),
       exploding,
+      clock,
+      config,
     );
 
     await expect(useCaseWithFailure.execute(transactionId)).rejects.toBeInstanceOf(
@@ -462,5 +544,119 @@ describe('GetTransactionUseCase', () => {
     }
     expect(order.filter((entry) => entry === 'finalize')).toHaveLength(2);
     expect(products.get(PRODUCT_ID)?.stock).toBe(5);
+  });
+
+  describe('lazy reservation expiry', () => {
+    const buildExpiry = async (): Promise<{
+      useCase: GetTransactionUseCase;
+      repo: InMemoryTransactionRepository;
+      store: InMemoryProductStore;
+      transactionId: string;
+      advance: (milliseconds: number) => void;
+    }> => {
+      let current = FIXED_NOW;
+      const mutableClock: Clock = { now: () => current };
+      const store = new InMemoryProductStore([
+        new Product({
+          id: PRODUCT_ID,
+          name: 'Wireless Mouse',
+          description: 'Ergonomic wireless mouse',
+          priceInCents: 70000,
+          stock: 5,
+          imageUrl: '/images/products/wireless-mouse.webp',
+          createdAt: new Date('2026-10-07T10:00:00.000Z'),
+          updatedAt: new Date('2026-10-07T11:00:00.000Z'),
+        }),
+      ]);
+      const repo = new InMemoryTransactionRepository(mutableClock, store);
+      const gateway = new FakePaymentGateway(merchantInfo);
+      const created = await repo.createPendingWithReservedStock({
+        productId: PRODUCT_ID,
+        reference: FIXED_REFERENCE,
+        idempotencyKey: 'order_0001_abcdefgh',
+        quantity: 2,
+        productAmountInCents: 140000,
+        baseFeeInCents: 3000,
+        deliveryFeeInCents: 1500,
+        totalInCents: 144500,
+        customer: {
+          fullName: 'Diana Alvarez',
+          email: 'diana@example.com',
+          phone: '+57 300 123 4567',
+        },
+        delivery: {
+          address: 'Calle 100 # 20-30',
+          city: 'Bogotá',
+          region: 'Cundinamarca',
+          notes: null,
+        },
+        now: current,
+      });
+      if (created.kind !== 'created') {
+        throw new Error('seeding failed');
+      }
+      const useCase = new GetTransactionUseCase(
+        recordingTransactionRepository(repo, []),
+        recordingPaymentGateway(gateway, []),
+        mutableClock,
+        config,
+      );
+      return {
+        useCase,
+        repo,
+        store,
+        transactionId: created.transaction.id,
+        advance: (milliseconds: number) => {
+          current = new Date(current.getTime() + milliseconds);
+        },
+      };
+    };
+
+    it('voids an expired reservation with RESERVATION_EXPIRED and returns its stock', async () => {
+      const { useCase, store, transactionId, advance } = await buildExpiry();
+      expect(store.findById(PRODUCT_ID)?.stock).toBe(3);
+
+      advance(901 * 1000);
+      const result = await useCase.execute(transactionId);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        return;
+      }
+      expect(result.value.status).toBe('VOIDED');
+      expect(result.value.failureReason).toBe('RESERVATION_EXPIRED');
+      expect(result.value.delivery).toMatchObject({ status: 'PENDING' });
+      expect(store.findById(PRODUCT_ID)?.stock).toBe(5);
+    });
+
+    it('leaves the reservation untouched one second before the ttl', async () => {
+      const { useCase, store, transactionId, advance } = await buildExpiry();
+
+      advance(899 * 1000);
+      const result = await useCase.execute(transactionId);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PENDING');
+      }
+      expect(store.findById(PRODUCT_ID)?.stock).toBe(3);
+    });
+
+    it('never expires a purchase whose payment was already started', async () => {
+      const { useCase, repo, store, transactionId, advance } =
+        await buildExpiry();
+      await repo.claimPayment(transactionId, FIXED_NOW, 120);
+
+      advance(3600 * 1000);
+      const result = await useCase.execute(transactionId);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PENDING');
+      }
+      const details = await repo.findById(transactionId);
+      expect(details?.transaction.status).toBe('PENDING');
+      expect(store.findById(PRODUCT_ID)?.stock).toBe(3);
+    });
   });
 });

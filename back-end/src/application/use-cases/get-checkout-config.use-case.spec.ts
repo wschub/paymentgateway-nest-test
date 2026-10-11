@@ -15,6 +15,7 @@ const config: AppConfigValues = {
   baseUrl: 'https://pay.example.test/v1',
   currency: 'COP',
   paymentClaimLeaseSeconds: 120,
+  reservationTtlSeconds: 900,
 };
 
 const merchantInfo: MerchantInfo = {

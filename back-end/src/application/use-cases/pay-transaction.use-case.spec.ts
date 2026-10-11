@@ -39,6 +39,7 @@ const config: AppConfigValues = {
   baseUrl: 'https://pay.example.test/v1',
   currency: 'COP',
   paymentClaimLeaseSeconds: 120,
+  reservationTtlSeconds: 900,
 };
 
 const providerCreateInput: CreateCardTransactionInput = {
@@ -108,7 +109,7 @@ const setup = async (): Promise<{
   const products = new Map<string, { name: string; stock: number }>([
     [PRODUCT_ID, { name: 'Wireless Mouse', stock: 5 }],
   ]);
-  const repo = new InMemoryTransactionRepository(clock, products, 900);
+  const repo = new InMemoryTransactionRepository(clock, products);
   const gateway = new FakePaymentGateway(merchantInfo);
   const transactionId = await seedTransaction(repo, FIXED_NOW);
   const useCase = new PayTransactionUseCase(
@@ -356,6 +357,27 @@ describe('PayTransactionUseCase', () => {
       'APPROVED',
     );
     expect(order).toEqual(['findById']);
+  });
+
+  it('sweeps an expired unpaid reservation first and then answers 409 TRANSACTION_NOT_PAYABLE', async () => {
+    const { useCase, repo, order, transactionId, advance } = await setup();
+
+    advance(901 * 1000);
+
+    const result = await useCase.execute(validInput(transactionId));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toBeInstanceOf(TransactionNotPayableError);
+    expect((result.error as TransactionNotPayableError).status).toBe('VOIDED');
+
+    const details = await repo.findById(transactionId);
+    expect(details?.transaction.status).toBe('VOIDED');
+    expect(details?.transaction.failureReason).toBe('RESERVATION_EXPIRED');
+    expect(order).toEqual(['findById', 'findById']);
+    expect(order).not.toContain('getMerchantInfo');
   });
 
   it('rejects installments below the minimum without touching the ports', async () => {

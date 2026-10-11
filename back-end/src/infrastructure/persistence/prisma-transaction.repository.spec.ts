@@ -156,7 +156,7 @@ describe('PrismaTransactionRepository', () => {
     it('returns the aggregate mapped to domain entities', async () => {
       const { prisma, transactionFindUnique } = buildPrisma();
       transactionFindUnique.mockResolvedValue(transactionRowWithRelations);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const details = await repository.findById(TRANSACTION_ID);
 
@@ -177,7 +177,7 @@ describe('PrismaTransactionRepository', () => {
     it('finds by idempotency key', async () => {
       const { prisma, transactionFindUnique } = buildPrisma();
       transactionFindUnique.mockResolvedValue(transactionRowWithRelations);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const details = await repository.findByIdempotencyKey('order_0001_abcdefgh');
 
@@ -190,7 +190,7 @@ describe('PrismaTransactionRepository', () => {
 
     it('returns null when there is no row or no delivery', async () => {
       const { prisma, transactionFindUnique } = buildPrisma();
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       transactionFindUnique.mockResolvedValueOnce(null);
       await expect(repository.findById('unknown')).resolves.toBeNull();
@@ -206,7 +206,7 @@ describe('PrismaTransactionRepository', () => {
       const { prisma, transactionFindUnique } = buildPrisma();
       const cause = new Error('P1001 cannot reach database');
       transactionFindUnique.mockRejectedValue(cause);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       try {
         await repository.findById(TRANSACTION_ID);
@@ -229,7 +229,7 @@ describe('PrismaTransactionRepository', () => {
       tx.customer.create.mockResolvedValue(customerRow);
       tx.transaction.create.mockResolvedValue(transactionRow);
       tx.delivery.create.mockResolvedValue(deliveryRow);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.createPendingWithReservedStock(createInput);
 
@@ -284,7 +284,7 @@ describe('PrismaTransactionRepository', () => {
       const { prisma, tx } = buildPrisma();
       tx.product.updateMany.mockResolvedValue({ count: 0 });
       tx.product.findUnique.mockResolvedValue(productRow);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.createPendingWithReservedStock(createInput);
 
@@ -297,7 +297,7 @@ describe('PrismaTransactionRepository', () => {
       const { prisma, tx } = buildPrisma();
       tx.product.updateMany.mockResolvedValue({ count: 0 });
       tx.product.findUnique.mockResolvedValue(null);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.createPendingWithReservedStock(createInput);
 
@@ -310,7 +310,7 @@ describe('PrismaTransactionRepository', () => {
       tx.customer.create.mockResolvedValue(customerRow);
       tx.transaction.create.mockRejectedValue(uniqueViolation());
       transactionFindUnique.mockResolvedValue(transactionRowWithRelations);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const duplicate = await repository.createPendingWithReservedStock(createInput);
 
@@ -332,7 +332,7 @@ describe('PrismaTransactionRepository', () => {
       tx.customer.create.mockResolvedValue(customerRow);
       tx.transaction.create.mockRejectedValue(cause);
       transactionFindUnique.mockResolvedValue(null);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       try {
         await repository.createPendingWithReservedStock(createInput);
@@ -351,7 +351,7 @@ describe('PrismaTransactionRepository', () => {
       const { prisma, tx } = buildPrisma();
       const cause = new Error('P1008 timeout exceeded');
       tx.product.updateMany.mockRejectedValue(cause);
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       try {
         await repository.createPendingWithReservedStock(createInput);
@@ -368,7 +368,7 @@ describe('PrismaTransactionRepository', () => {
     it('claims the lease with an exact CAS shape', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
       const claimAt = new Date('2026-10-09T10:05:00.000Z');
 
       const claimed = await repository.claimPayment(TRANSACTION_ID, claimAt, 120);
@@ -395,7 +395,7 @@ describe('PrismaTransactionRepository', () => {
     it('returns false when the purchase already has a provider transaction', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockResolvedValue({ count: 0 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const claimed = await repository.claimPayment(TRANSACTION_ID, FIXTURE_NOW, 120);
 
@@ -407,7 +407,7 @@ describe('PrismaTransactionRepository', () => {
     it('returns false when no row changes', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockResolvedValue({ count: 0 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const claimed = await repository.claimPayment(TRANSACTION_ID, FIXTURE_NOW, 120);
 
@@ -417,7 +417,7 @@ describe('PrismaTransactionRepository', () => {
     it('wraps prisma failures into DataAccessError', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockRejectedValue(new Error('boom'));
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       await expect(
         repository.claimPayment(TRANSACTION_ID, FIXTURE_NOW, 120),
@@ -429,7 +429,7 @@ describe('PrismaTransactionRepository', () => {
     it('sets provider_transaction_id only when it is still null', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       await repository.attachProviderTransaction({
         transactionId: TRANSACTION_ID,
@@ -450,7 +450,7 @@ describe('PrismaTransactionRepository', () => {
     it('clears payment_started_at only when no provider transaction is stored', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       await repository.releasePaymentClaim(TRANSACTION_ID);
 
@@ -478,7 +478,7 @@ describe('PrismaTransactionRepository', () => {
         providerTransactionId: 'provider-tx-1',
       });
       tx.delivery.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.finalize({
         transactionId: TRANSACTION_ID,
@@ -518,7 +518,7 @@ describe('PrismaTransactionRepository', () => {
         failureReason: 'Declined by issuer',
       });
       tx.product.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.finalize({
         transactionId: TRANSACTION_ID,
@@ -543,7 +543,7 @@ describe('PrismaTransactionRepository', () => {
         ...transactionRow,
         status: 'APPROVED',
       });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       const result = await repository.finalize({
         transactionId: TRANSACTION_ID,
@@ -559,7 +559,7 @@ describe('PrismaTransactionRepository', () => {
     it('wraps prisma failures into DataAccessError', async () => {
       const { prisma, tx } = buildPrisma();
       tx.transaction.updateMany.mockRejectedValue(new Error('boom'));
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
       await expect(
         repository.finalize({ transactionId: TRANSACTION_ID, status: 'APPROVED' }),
@@ -575,10 +575,10 @@ describe('PrismaTransactionRepository', () => {
       ]);
       tx.transaction.updateMany.mockResolvedValue({ count: 1 });
       tx.product.updateMany.mockResolvedValue({ count: 1 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
       const now = new Date(FIXTURE_NOW.getTime() + 1000 * 1000);
 
-      const released = await repository.releaseExpiredReservations(now);
+      const released = await repository.releaseExpiredReservations(now, 900);
 
       expect(transactionFindMany).toHaveBeenCalledWith({
         where: {
@@ -612,9 +612,12 @@ describe('PrismaTransactionRepository', () => {
         { id: TRANSACTION_ID, productId: PRODUCT_ID, quantity: 2 },
       ]);
       tx.transaction.updateMany.mockResolvedValue({ count: 0 });
-      const repository = new PrismaTransactionRepository(prisma, clock, 900);
+      const repository = new PrismaTransactionRepository(prisma, clock);
 
-      const released = await repository.releaseExpiredReservations(FIXTURE_NOW);
+      const released = await repository.releaseExpiredReservations(
+        FIXTURE_NOW,
+        900,
+      );
 
       expect($transaction).toHaveBeenCalledTimes(1);
       expect(released).toBe(0);
