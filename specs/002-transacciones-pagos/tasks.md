@@ -118,10 +118,10 @@
 
 ## Phase 6: User Story 1 - End-to-end tests (fake gateway)
 
-- [ ] T045 [US1] Write `back-end/test/checkout-config.e2e-spec.ts`: `GET /payments/checkout-config` with the `PaymentGateway` provider overridden by `FakePaymentGateway` and `global.fetch` guarded (FR-001).
-- [ ] T046 [US1] Write `back-end/test/transaction-create.e2e-spec.ts`: `POST /transactions` success (201), missing/invalid `Idempotency-Key` (400), unknown product (404) and **client-sent amounts rejected (400)** (FR-002, FR-003).
-- [ ] T047 [US1] Write `back-end/test/transaction-payment.e2e-spec.ts`: `POST /transactions/:id/payment` approved path (202 then 200) and `acceptedContracts:false` (422); **assert no response body contains a card number, CVC, card token or secret** (FR-005, FR-012).
-- [ ] T048 [US1] Write `back-end/test/transaction-status.e2e-spec.ts`: `GET /transactions/:id` pending → approved with an assigned delivery; unknown id → 404 (FR-007).
+- [X] T045 [US1] Write `back-end/test/checkout-config.e2e-spec.ts`: `GET /payments/checkout-config` with the `PaymentGateway` provider overridden by `FakePaymentGateway` and `global.fetch` guarded (FR-001).
+- [X] T046 [US1] Write `back-end/test/transaction-create.e2e-spec.ts`: `POST /transactions` success (201), missing/invalid `Idempotency-Key` (400), unknown product (404) and **client-sent amounts rejected (400)** (FR-002, FR-003).
+- [X] T047 [US1] Write `back-end/test/transaction-payment.e2e-spec.ts`: `POST /transactions/:id/payment` approved path (202 then 200) and `acceptedContracts:false` (422); **assert no response body contains a card number, CVC, card token or secret** (FR-005, FR-012).
+- [X] T048 [US1] Write `back-end/test/transaction-status.e2e-spec.ts`: `GET /transactions/:id` pending → approved with an assigned delivery; unknown id → 404 (FR-007).
 
 **Checkpoint**: US1 is independently testable end-to-end through HTTP with no network.
 
