@@ -124,17 +124,30 @@ npm run test:e2e      # e2e with the fake gateway (setup-env.ts provides placeho
 npm run test:int      # integration against real PostgreSQL (DB name must end with _test)
 ```
 
-`npm run test:int` reads **`TEST_DATABASE_URL`** (empty in `.env.example`; it never uses `DATABASE_URL`). Before
-running it, create the test database and apply the migrations against that URL:
+`npm run test:int` reads **`TEST_DATABASE_URL`** (empty in `.env.example`; it never uses `DATABASE_URL`). It builds
+its own `PrismaClient` + the real `PrismaTransactionRepository`, truncates every table before each test and covers
+the CHECK constraints and the reserve/claim/finalize/expire race conditions against a real server. It is excluded
+from `test:cov` (unit) and `test:e2e`.
+
+Before running it, create the test database and apply the migrations **to that database only**:
 
 ```bash
 cd back-end
 createdb paymentgateway_test
-TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run prisma:migrate:deploy
-npm run test:int
+# `prisma:migrate:test` copies TEST_DATABASE_URL into DATABASE_URL for this command only,
+# so the development database is never migrated.
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run prisma:migrate:test
+
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run test:int
 ```
 
-The suite aborts if the database name does not end with `_test`.
+The suite aborts (before issuing any query) when `TEST_DATABASE_URL` is empty or its database name does not end with
+`_test`. To confirm the migration targeted the test database, compare the applied migrations in each database:
+
+```bash
+psql "$DATABASE_URL"      -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name;'  # development
+psql "$TEST_DATABASE_URL" -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name;'  # test
+```
 
 The sandbox spike (`./scripts/sandbox-spike.sh`) is the only manual check that talks to the provider.
 
