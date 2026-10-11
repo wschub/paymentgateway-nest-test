@@ -182,10 +182,10 @@ describe('Transaction', () => {
   });
 
   describe('money invariants', () => {
-    it('rejects a quantity that is not a positive integer', () => {
-      for (const quantity of [0, -1, 1.5]) {
+    it('rejects a quantity that is not an integer between 1 and 10', () => {
+      for (const quantity of [0, -1, 1.5, 11]) {
         expect(() => new Transaction({ ...props, quantity })).toThrow(
-          'quantity must be a positive integer',
+          'quantity must be an integer between 1 and 10',
         );
       }
     });

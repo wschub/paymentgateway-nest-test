@@ -69,10 +69,11 @@ describe('CreateTransactionDto', () => {
     await expectRejected({ ...validBody(), productId: 'not-a-uuid' });
   });
 
-  it('rejects a quantity that is not a positive integer', async () => {
+  it('rejects a quantity that is not an integer between 1 and 10', async () => {
     await expectRejected({ ...validBody(), quantity: 0 });
     await expectRejected({ ...validBody(), quantity: 1.5 });
     await expectRejected({ ...validBody(), quantity: '2' });
+    await expectRejected({ ...validBody(), quantity: 11 }, '11');
   });
 
   it('rejects a missing customer or delivery', async () => {

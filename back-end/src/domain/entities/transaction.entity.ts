@@ -100,7 +100,7 @@ export class Transaction {
       );
     }
     if (!isValidQuantity(props.quantity)) {
-      throw new RangeError('quantity must be a positive integer');
+      throw new RangeError('quantity must be an integer between 1 and 10');
     }
     if (
       !Number.isInteger(props.productAmountInCents) ||

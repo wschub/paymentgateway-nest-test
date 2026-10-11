@@ -142,9 +142,10 @@ describe('CreateTransactionUseCase', () => {
       await assertFieldError({ ...validInput(), productId: ' ' }, 'productId');
     });
 
-    it('rejects a non-positive or non-integer quantity', async () => {
+    it('rejects a quantity outside the 1 to 10 range or non-integer', async () => {
       await assertFieldError({ ...validInput(), quantity: 0 }, 'quantity');
       await assertFieldError({ ...validInput(), quantity: 1.5 }, 'quantity');
+      await assertFieldError({ ...validInput(), quantity: 11 }, 'quantity');
     });
 
     it('rejects a long idempotency key', async () => {
