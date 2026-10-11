@@ -316,8 +316,8 @@ describe('PrismaTransactionRepository', () => {
 
       expect(duplicate.kind).toBe('duplicate');
       if (duplicate.kind === 'duplicate') {
-        expect(duplicate.transaction).toBeInstanceOf(Transaction);
-        expect(duplicate.transaction.id).toBe(TRANSACTION_ID);
+        expect(duplicate.details.transaction).toBeInstanceOf(Transaction);
+        expect(duplicate.details.transaction.id).toBe(TRANSACTION_ID);
       }
       expect(transactionFindUnique).toHaveBeenCalledWith({
         where: { idempotencyKey: 'order_0001_abcdefgh' },

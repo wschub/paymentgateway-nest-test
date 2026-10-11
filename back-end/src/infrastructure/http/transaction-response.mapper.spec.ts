@@ -20,6 +20,7 @@ const output: CreateTransactionOutput = {
     deliveryFeeInCents: 900000,
     totalInCents: 2700000,
   },
+  replayed: false,
 };
 
 const view = (overrides: Partial<TransactionView> = {}): TransactionView => ({
@@ -54,6 +55,7 @@ describe('transaction-response.mapper', () => {
     const dto = toCreateTransactionResponseDto(output);
 
     expect(dto).toBeInstanceOf(CreateTransactionResponseDto);
+    expect(dto).not.toHaveProperty('replayed');
     expect(dto).toEqual({
       id: 'f0e1',
       reference: 'TXN-7K3F9Q2M8XJA4B6C',

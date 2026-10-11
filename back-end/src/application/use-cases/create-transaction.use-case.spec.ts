@@ -1,7 +1,9 @@
+import { Customer } from '../../domain/entities/customer.entity';
+import { Delivery } from '../../domain/entities/delivery.entity';
 import { Product } from '../../domain/entities/product.entity';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { DataAccessError } from '../../domain/errors/data-access.error';
-import { IdempotencyReplayNotSupportedError } from '../../domain/errors/idempotency-replay-not-supported.error';
+import { IdempotencyKeyReusedError } from '../../domain/errors/idempotency-key-reused.error';
 import { InsufficientStockError } from '../../domain/errors/insufficient-stock.error';
 import { InvalidTransactionRequestError } from '../../domain/errors/invalid-transaction-request.error';
 import { ProductNotFoundError } from '../../domain/errors/product-not-found.error';
@@ -9,6 +11,7 @@ import type { Clock } from '../../domain/ports/clock.port';
 import type { ProductRepository } from '../../domain/ports/product.repository';
 import type {
   CreatePendingWithReservedStockInput,
+  TransactionDetails,
   TransactionRepository,
 } from '../../domain/ports/transaction.repository';
 import { FeesConfig } from '../../domain/value-objects/fees-config';
@@ -92,6 +95,30 @@ const buildTransaction = (input: CreatePendingWithReservedStockInput): Transacti
     updatedAt: input.now,
   });
 
+const detailsFor = (
+  input: CreatePendingWithReservedStockInput,
+  email: string = input.customer.email,
+): TransactionDetails => ({
+  transaction: buildTransaction(input),
+  customer: new Customer({
+    id: 'customer-captured',
+    fullName: input.customer.fullName,
+    email,
+    phone: input.customer.phone,
+  }),
+  delivery: new Delivery({
+    id: 'delivery-captured',
+    transactionId: 'tx-captured',
+    status: 'PENDING',
+    address: input.delivery.address,
+    city: input.delivery.city,
+    region: input.delivery.region,
+    notes: input.delivery.notes,
+    assignedAt: null,
+  }),
+  product: { id: input.productId, name: 'Wireless Mouse' },
+});
+
 const recordingRepository = (): TransactionRepository & {
   createInputs: CreatePendingWithReservedStockInput[];
 } => {
@@ -133,6 +160,25 @@ describe('CreateTransactionUseCase', () => {
       clock,
       new Map([[product.id, { name: product.name, stock: product.stock }]]),
     );
+
+  const stubRepository = (
+    overrides: Partial<TransactionRepository> = {},
+  ): TransactionRepository => ({
+    findById: async () => null,
+    findByIdempotencyKey: async () => null,
+    releaseExpiredReservations: async () => 0,
+    createPendingWithReservedStock: async (input) => ({
+      kind: 'created',
+      transaction: buildTransaction(input),
+    }),
+    claimPayment: async () => false,
+    releasePaymentClaim: async () => undefined,
+    attachProviderTransaction: async () => undefined,
+    finalize: async () => {
+      throw new Error('finalize is not used in these tests');
+    },
+    ...overrides,
+  });
 
   describe('validation', () => {
     const assertFieldError = async (
@@ -293,6 +339,7 @@ describe('CreateTransactionUseCase', () => {
             deliveryFeeInCents: 1500,
             totalInCents: 144500,
           },
+          replayed: false,
         },
       });
     });
@@ -426,17 +473,21 @@ describe('CreateTransactionUseCase', () => {
       expect(result.error).toBeInstanceOf(ProductNotFoundError);
     });
 
-    it('returns an explicit placeholder error for a duplicate, never leaving it unhandled', async () => {
+    it('replays the stored purchase for a repeated key instead of failing', async () => {
       const repository = inMemoryRepository();
-      await useCaseWith(repository).execute(validInput());
+      const useCase = useCaseWith(repository);
 
-      const result = await useCaseWith(repository).execute(validInput());
+      const first = await useCase.execute(validInput());
+      const second = await useCase.execute(validInput());
 
-      expect(result.ok).toBe(false);
-      if (result.ok) {
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!first.ok || !second.ok) {
         return;
       }
-      expect(result.error).toBeInstanceOf(IdempotencyReplayNotSupportedError);
+      expect(second.value.replayed).toBe(true);
+      expect(second.value.id).toBe(first.value.id);
+      expect(second.value.reference).toBe(first.value.reference);
     });
 
     it('converts a DataAccessError thrown by the transaction repository', async () => {
@@ -490,27 +541,150 @@ describe('CreateTransactionUseCase', () => {
       plainError,
     );
   });
+  });
 
-  describe('reservation expiry sweep', () => {
-    const stubRepository = (
-      overrides: Partial<TransactionRepository> = {},
-    ): TransactionRepository => ({
-      findById: async () => null,
-      findByIdempotencyKey: async () => null,
-      releaseExpiredReservations: async () => 0,
-      createPendingWithReservedStock: async (input) => ({
-        kind: 'created',
-        transaction: buildTransaction(input),
-      }),
-      claimPayment: async () => false,
-      releasePaymentClaim: async () => undefined,
-      attachProviderTransaction: async () => undefined,
-      finalize: async () => {
-        throw new Error('finalize is not used in these tests');
-      },
-      ...overrides,
+  describe('idempotency replay and key reuse', () => {
+    it('rejects a reused key whose request differs with IdempotencyKeyReusedError', async () => {
+      const repository = inMemoryRepository();
+      const useCase = useCaseWith(repository);
+      await useCase.execute(validInput());
+
+      const result = await useCase.execute({ ...validInput(), quantity: 1 });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        return;
+      }
+      expect(result.error).toBeInstanceOf(IdempotencyKeyReusedError);
+      expect((result.error as IdempotencyKeyReusedError).idempotencyKey).toBe(
+        validInput().idempotencyKey,
+      );
     });
 
+    it('rejects a reused key whose customer email differs', async () => {
+      const repository = inMemoryRepository();
+      const useCase = useCaseWith(repository);
+      await useCase.execute(validInput());
+
+      const result = await useCase.execute({
+        ...validInput(),
+        customer: { ...validInput().customer, email: 'other@example.com' },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        return;
+      }
+      expect(result.error).toBeInstanceOf(IdempotencyKeyReusedError);
+    });
+
+    it('replays a duplicate variant returned by the repository (concurrent loser)', async () => {
+      const repository = stubRepository({
+        createPendingWithReservedStock: async (input) => ({
+          kind: 'duplicate',
+          details: detailsFor(input),
+        }),
+      });
+
+      const result = await useCaseWith(repository).execute(validInput());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        return;
+      }
+      expect(result.value.replayed).toBe(true);
+      expect(result.value.id).toBe('tx-captured');
+    });
+
+    it('maps a duplicate whose fingerprint differs to IdempotencyKeyReusedError', async () => {
+      const repository = stubRepository({
+        createPendingWithReservedStock: async (input) => ({
+          kind: 'duplicate',
+          details: detailsFor(input, 'other@example.com'),
+        }),
+      });
+
+      const result = await useCaseWith(repository).execute(validInput());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        return;
+      }
+      expect(result.error).toBeInstanceOf(IdempotencyKeyReusedError);
+    });
+
+    it('returns err(DataAccessError) when the idempotency lookup fails', async () => {
+      const cause = new Error('lookup failed');
+      const repository = stubRepository({
+        findByIdempotencyKey: async () => {
+          throw new DataAccessError('Idempotency lookup failed', { cause });
+        },
+      });
+
+      const result = await useCaseWith(repository).execute(validInput());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        return;
+      }
+      expect(result.error).toBeInstanceOf(DataAccessError);
+      expect(result.error.cause).toBe(cause);
+    });
+  });
+
+  describe('concurrency', () => {
+    // Real database concurrency (unique constraints and transaction isolation)
+    // is covered by the integration suite in T056. These tests exercise the
+    // in-memory doubles under Promise.all.
+    it('reserves the last unit exactly once for two concurrent creations', async () => {
+      const repository = new InMemoryTransactionRepository(
+        clock,
+        new Map([[product.id, { name: product.name, stock: 1 }]]),
+      );
+      const useCase = useCaseWith(repository);
+
+      const results = await Promise.all([
+        useCase.execute({
+          ...validInput(),
+          quantity: 1,
+          idempotencyKey: 'order_a_00000001',
+        }),
+        useCase.execute({
+          ...validInput(),
+          quantity: 1,
+          idempotencyKey: 'order_b_00000001',
+        }),
+      ]);
+
+      const created = results.filter((result) => result.ok);
+      const rejected = results.filter((result) => !result.ok);
+      expect(created).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      if (!rejected[0].ok) {
+        expect(rejected[0].error).toBeInstanceOf(InsufficientStockError);
+      }
+    });
+
+    it('creates one purchase and replays the other for two concurrent requests with the same key', async () => {
+      const useCase = useCaseWith(inMemoryRepository());
+
+      const results = await Promise.all([
+        useCase.execute(validInput()),
+        useCase.execute(validInput()),
+      ]);
+
+      expect(results.every((result) => result.ok)).toBe(true);
+      if (!results[0].ok || !results[1].ok) {
+        return;
+      }
+      const flags = [results[0].value.replayed, results[1].value.replayed];
+      expect(flags.filter((replayed) => replayed)).toHaveLength(1);
+      expect(flags.filter((replayed) => !replayed)).toHaveLength(1);
+      expect(results[0].value.id).toBe(results[1].value.id);
+    });
+  });
+
+  describe('reservation expiry sweep', () => {
     it('sweeps expired reservations with the clock now and the configured ttl before reserving', async () => {
       const sweeps: Array<{ now: Date; ttl: number }> = [];
       let reservedAfterSweep = false;
@@ -601,5 +775,4 @@ describe('CreateTransactionUseCase', () => {
       expect(store.findById(product.id)?.stock).toBe(0);
     });
   });
-});
 });

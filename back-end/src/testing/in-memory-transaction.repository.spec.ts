@@ -81,7 +81,10 @@ describe('InMemoryTransactionRepository', () => {
         reference: 'TXN-D2E3F4A5B6C7D8E9',
       });
 
-      expect(second).toEqual({ kind: 'duplicate', transaction: first.transaction });
+      expect(second).toEqual({
+        kind: 'duplicate',
+        details: expect.objectContaining({ transaction: first.transaction }),
+      });
     });
 
     it('rejects a reused reference without decrementing stock again', async () => {
@@ -94,7 +97,10 @@ describe('InMemoryTransactionRepository', () => {
         idempotencyKey: 'another_key_000000',
       });
 
-      expect(second).toEqual({ kind: 'duplicate', transaction: first.transaction });
+      expect(second).toEqual({
+        kind: 'duplicate',
+        details: expect.objectContaining({ transaction: first.transaction }),
+      });
     });
   });
 
