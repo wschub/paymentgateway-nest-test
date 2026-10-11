@@ -2,6 +2,8 @@ import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { DataAccessError } from '../../domain/errors/data-access.error';
+import { InvalidPaymentTokenError } from '../../domain/errors/invalid-payment-token.error';
+import { PaymentProviderUnavailableError } from '../../domain/errors/payment-provider-unavailable.error';
 import { ProductNotFoundError } from '../../domain/errors/product-not-found.error';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import type { ErrorBody } from './error-body';
@@ -190,6 +192,31 @@ describe('AllExceptionsFilter', () => {
     expect(JSON.stringify(body)).not.toContain('sk_live_123');
     expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
     expect(JSON.stringify(body)).not.toContain('SecretsError');
+  });
+
+  it('answers an invalid payment token with a fixed 422 and never logs it', () => {
+    const body = catchException(new InvalidPaymentTokenError(), '/transactions/t-1/payment');
+
+    expect(body).toEqual({
+      statusCode: 422,
+      code: 'INVALID_PAYMENT_TOKEN',
+      message: 'The payment token is invalid',
+      path: '/transactions/t-1/payment',
+      timestamp: expect.any(String),
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers an unavailable provider with 503 without leaking the cause into the body', () => {
+    const body = catchException(
+      new PaymentProviderUnavailableError('timeout'),
+      '/transactions/t-1/payment',
+    );
+
+    expect(body.statusCode).toBe(503);
+    expect(body.code).toBe('PAYMENT_PROVIDER_UNAVAILABLE');
+    expect(body.message).toBe('The payment provider is temporarily unavailable');
+    expect(JSON.stringify(body)).not.toContain('tok_');
   });
 
   it('does not log client errors at error level', () => {
