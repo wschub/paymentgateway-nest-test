@@ -510,6 +510,24 @@ describe('PayTransactionUseCase', () => {
     ]);
   });
 
+  // Real database concurrency (the atomic payment claim and unique constraints)
+  // is covered by the integration suite in T056.
+  it('makes exactly one provider create call for two concurrent payments of the same purchase', async () => {
+    const { useCase, gateway, transactionId } = await setup();
+    gateway.enqueueStatus('APPROVED');
+
+    const results = await Promise.all([
+      useCase.execute(validInput(transactionId)),
+      useCase.execute(validInput(transactionId)),
+    ]);
+
+    expect(results.every((result) => result.ok)).toBe(true);
+    const creates = gateway
+      .recordedCalls()
+      .filter((call) => call.method === 'createCardTransaction');
+    expect(creates).toHaveLength(1);
+  });
+
   it('finalizes when the claim was lost but the reconciled transaction is already final', async () => {
     const { useCase, repo, gateway, order, transactionId } = await setup();
     gateway.enqueueStatus('APPROVED');
