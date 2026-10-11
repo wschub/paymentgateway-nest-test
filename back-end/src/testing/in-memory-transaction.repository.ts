@@ -16,6 +16,7 @@ import type {
   TransactionDetails,
   TransactionRepository,
 } from '../domain/ports/transaction.repository';
+import { InMemoryProductStore } from './in-memory-product-store';
 
 interface SeededProduct {
   name: string;
@@ -28,14 +29,21 @@ export class InMemoryTransactionRepository implements TransactionRepository {
   private readonly deliveries = new Map<string, Delivery>();
   private readonly byIdempotencyKey = new Map<string, Transaction>();
   private readonly products: Map<string, SeededProduct>;
+  private readonly store: InMemoryProductStore | null;
   private idCounter = 0;
 
   constructor(
     private readonly clock: Clock,
-    products: ReadonlyMap<string, SeededProduct> = new Map(),
+    source: ReadonlyMap<string, SeededProduct> | InMemoryProductStore = new Map(),
     private readonly reservationTtlSeconds = 900,
   ) {
-    this.products = new Map(products);
+    if (source instanceof InMemoryProductStore) {
+      this.store = source;
+      this.products = new Map();
+    } else {
+      this.store = null;
+      this.products = new Map(source);
+    }
   }
 
   async findById(id: string): Promise<TransactionDetails | null> {
@@ -75,11 +83,11 @@ export class InMemoryTransactionRepository implements TransactionRepository {
   async createPendingWithReservedStock(
     input: CreatePendingWithReservedStockInput,
   ): Promise<CreatePendingWithReservedStockResult> {
-    const product = this.products.get(input.productId);
-    if (!product) {
+    const availableStock = this.stockOf(input.productId);
+    if (availableStock === null) {
       return { kind: 'product_not_found' };
     }
-    if (product.stock < input.quantity) {
+    if (availableStock < input.quantity) {
       return { kind: 'out_of_stock' };
     }
     const existingByKey = this.byIdempotencyKey.get(input.idempotencyKey);
@@ -130,7 +138,7 @@ export class InMemoryTransactionRepository implements TransactionRepository {
       updatedAt: input.now,
     });
 
-    product.stock -= input.quantity;
+    this.decrementStock(input.productId, input.quantity);
     this.transactions.set(id, transaction);
     this.customers.set(customer.id, customer);
     this.deliveries.set(id, delivery);
@@ -224,16 +232,43 @@ export class InMemoryTransactionRepository implements TransactionRepository {
     }
     const customer = this.customers.get(transaction.customerId);
     const delivery = this.deliveries.get(transaction.id);
-    const product = this.products.get(transaction.productId);
-    if (!customer || !delivery || !product) {
+    const productName = this.nameOf(transaction.productId);
+    if (!customer || !delivery || productName === null) {
       return null;
     }
     return {
       transaction,
       customer,
       delivery,
-      product: { id: transaction.productId, name: product.name },
+      product: { id: transaction.productId, name: productName },
     };
+  }
+
+  private stockOf(productId: string): number | null {
+    if (this.store !== null) {
+      const product = this.store.findById(productId);
+      return product === null ? null : product.stock;
+    }
+    const product = this.products.get(productId);
+    return product === undefined ? null : product.stock;
+  }
+
+  private nameOf(productId: string): string | null {
+    if (this.store !== null) {
+      return this.store.nameOf(productId);
+    }
+    return this.products.get(productId)?.name ?? null;
+  }
+
+  private decrementStock(productId: string, quantity: number): void {
+    if (this.store !== null) {
+      this.store.reserve(productId, quantity);
+      return;
+    }
+    const product = this.products.get(productId);
+    if (product) {
+      product.stock -= quantity;
+    }
   }
 
   private requireTransaction(transactionId: string): Transaction {
@@ -256,6 +291,10 @@ export class InMemoryTransactionRepository implements TransactionRepository {
   }
 
   private releaseStock(productId: string, quantity: number): void {
+    if (this.store !== null) {
+      this.store.release(productId, quantity);
+      return;
+    }
     const product = this.products.get(productId);
     if (product) {
       product.stock += quantity;
