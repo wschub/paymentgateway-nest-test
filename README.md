@@ -183,6 +183,7 @@ All names, taken from `.env.example` (empty values; fill them in your local `.en
 | `PAYMENT_TIMEOUT_MS` *(optional)* | Provider call timeout — default 10000           |
 | `RESERVATION_TTL_SECONDS` *(optional)* | Stock reservation TTL — default 900        |
 | `PAYMENT_CLAIM_LEASE_SECONDS` *(optional)* | Payment claim lease — default 120     |
+| `TRUST_PROXY` *(optional)*     | App (Express `trust proxy` hop count — default 0)   |
 | `TEST_DATABASE_URL`            | Integration suite only (DB name must end `_test`)   |
 | `POSTGRES_USER`                | Docker Compose only                                 |
 | `POSTGRES_PASSWORD`            | Docker Compose only                                 |

@@ -17,6 +17,7 @@ export interface AppEnv {
   PAYMENT_TIMEOUT_MS: number;
   RESERVATION_TTL_SECONDS: number;
   PAYMENT_CLAIM_LEASE_SECONDS: number;
+  TRUST_PROXY: number;
 }
 
 export type ValidatedEnv = AppEnv & Record<string, unknown>;
@@ -29,6 +30,7 @@ const OPTION_DEFAULTS = {
   PAYMENT_TIMEOUT_MS: 10000,
   RESERVATION_TTL_SECONDS: 900,
   PAYMENT_CLAIM_LEASE_SECONDS: 120,
+  TRUST_PROXY: 0,
 } as const;
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -258,6 +260,14 @@ export const validateEnv = (env: Record<string, unknown>): ValidatedEnv => {
     (value) => value >= 1,
     'a positive integer',
   );
+  const trustProxy = readOptionalInteger(
+    env,
+    'TRUST_PROXY',
+    OPTION_DEFAULTS.TRUST_PROXY,
+    problems,
+    (value) => value >= 0,
+    'a non-negative integer',
+  );
 
   if (problems.length > 0) {
     throw new Error(
@@ -285,5 +295,6 @@ export const validateEnv = (env: Record<string, unknown>): ValidatedEnv => {
     PAYMENT_TIMEOUT_MS: paymentTimeoutMs,
     RESERVATION_TTL_SECONDS: reservationTtlSeconds,
     PAYMENT_CLAIM_LEASE_SECONDS: paymentClaimLeaseSeconds,
+    TRUST_PROXY: trustProxy,
   };
 };
