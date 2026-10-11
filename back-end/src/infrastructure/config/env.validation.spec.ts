@@ -153,9 +153,10 @@ describe('validateEnv', () => {
     expect(result.PAYMENT_TIMEOUT_MS).toBe(10000);
     expect(result.RESERVATION_TTL_SECONDS).toBe(900);
     expect(result.PAYMENT_CLAIM_LEASE_SECONDS).toBe(120);
+    expect(result.TRUST_PROXY).toBe(0);
   });
 
-  it('coerces explicit fee and timer overrides', () => {
+  it('coerces explicit fee, timer and trust-proxy overrides', () => {
     const result = validateEnv({
       ...validEnv(),
       BASE_FEE_IN_CENTS: '150000',
@@ -163,6 +164,7 @@ describe('validateEnv', () => {
       PAYMENT_TIMEOUT_MS: '5000',
       RESERVATION_TTL_SECONDS: '600',
       PAYMENT_CLAIM_LEASE_SECONDS: '60',
+      TRUST_PROXY: '2',
     });
 
     expect(result.BASE_FEE_IN_CENTS).toBe(150000);
@@ -170,7 +172,23 @@ describe('validateEnv', () => {
     expect(result.PAYMENT_TIMEOUT_MS).toBe(5000);
     expect(result.RESERVATION_TTL_SECONDS).toBe(600);
     expect(result.PAYMENT_CLAIM_LEASE_SECONDS).toBe(60);
+    expect(result.TRUST_PROXY).toBe(2);
   });
+
+  it('accepts an explicit zero trust-proxy hop count', () => {
+    const result = validateEnv({ ...validEnv(), TRUST_PROXY: '0' });
+
+    expect(result.TRUST_PROXY).toBe(0);
+  });
+
+  it.each(['-1', '-5', '1.5', 'abc'])(
+    'rejects TRUST_PROXY value %s',
+    (trustProxy) => {
+      expect(() =>
+        validateEnv({ ...validEnv(), TRUST_PROXY: trustProxy }),
+      ).toThrow(/TRUST_PROXY must be a non-negative integer/);
+    },
+  );
 
   it.each(['-1', '-5', '12.5', 'fast'])(
     'rejects BASE_FEE_IN_CENTS value %s',

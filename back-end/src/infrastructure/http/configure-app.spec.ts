@@ -11,6 +11,7 @@ describe('configureApp', () => {
     CORS_ORIGINS: 'http://localhost:5173, http://localhost:3001',
     RATE_LIMIT_TTL: 60,
     RATE_LIMIT_MAX: 10,
+    TRUST_PROXY: 2,
   };
 
   let config: ConfigService;
@@ -22,6 +23,8 @@ describe('configureApp', () => {
   let useGlobalPipes: jest.Mock;
   let useGlobalFilters: jest.Mock;
   let useGlobalGuards: jest.Mock;
+  let getHttpAdapter: jest.Mock;
+  let set: jest.Mock;
 
   beforeEach(() => {
     getOrThrow = jest.fn((key: string) => env[key]);
@@ -32,6 +35,10 @@ describe('configureApp', () => {
     useGlobalPipes = jest.fn();
     useGlobalFilters = jest.fn();
     useGlobalGuards = jest.fn();
+    set = jest.fn();
+    getHttpAdapter = jest.fn().mockReturnValue({
+      getInstance: () => ({ set }),
+    });
     app = {
       use,
       enableCors,
@@ -39,6 +46,7 @@ describe('configureApp', () => {
       useGlobalFilters,
       useGlobalGuards,
       get: appGet,
+      getHttpAdapter,
     } as unknown as INestApplication;
   });
 
@@ -49,6 +57,15 @@ describe('configureApp', () => {
     expect(getOrThrow).toHaveBeenCalledWith('CORS_ORIGINS');
     expect(getOrThrow).toHaveBeenCalledWith('RATE_LIMIT_TTL');
     expect(getOrThrow).toHaveBeenCalledWith('RATE_LIMIT_MAX');
+    expect(getOrThrow).toHaveBeenCalledWith('TRUST_PROXY');
+  });
+
+  it('applies the configured trust-proxy hop count to Express', async () => {
+    await configureApp(app);
+
+    expect(getHttpAdapter).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith('trust proxy', 2);
   });
 
   it('registers Helmet as middleware', async () => {

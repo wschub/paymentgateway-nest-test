@@ -10,6 +10,9 @@ import { configureSwagger } from './configure-swagger';
 export const configureApp = async (app: INestApplication): Promise<void> => {
   const config = app.get(ConfigService);
 
+  const trustProxy = config.getOrThrow<number>('TRUST_PROXY');
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
+
   app.use(helmet());
 
   const corsOrigins = config
