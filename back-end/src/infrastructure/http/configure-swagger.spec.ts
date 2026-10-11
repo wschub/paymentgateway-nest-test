@@ -37,6 +37,8 @@ describe('configureSwagger', () => {
         }),
         tags: expect.arrayContaining([
           expect.objectContaining({ name: 'products' }),
+          expect.objectContaining({ name: 'transactions' }),
+          expect.objectContaining({ name: 'payments' }),
         ]),
       }),
     );

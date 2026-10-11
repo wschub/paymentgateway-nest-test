@@ -4,10 +4,13 @@ import type { App } from 'supertest/types';
 import { Product } from '../src/domain/entities/product.entity';
 import { AppConfigModule } from '../src/infrastructure/config/config.module';
 import { configureApp } from '../src/infrastructure/http/configure-app';
+import { PaymentsModule } from '../src/infrastructure/modules/payments.module';
 import {
   PRODUCTS_REPOSITORY,
   ProductsModule,
 } from '../src/infrastructure/modules/products.module';
+import { TransactionsModule } from '../src/infrastructure/modules/transactions.module';
+import { PrismaModule } from '../src/infrastructure/persistence/prisma.module';
 import { InMemoryProductRepository } from '../src/testing/in-memory-product.repository';
 import type { INestApplication } from '@nestjs/common';
 
@@ -27,7 +30,13 @@ describe('Swagger (e2e)', () => {
 
   const startApp = async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppConfigModule, ProductsModule],
+      imports: [
+        AppConfigModule,
+        PrismaModule,
+        ProductsModule,
+        TransactionsModule,
+        PaymentsModule,
+      ],
     })
       .overrideProvider(PRODUCTS_REPOSITORY)
       .useValue(new InMemoryProductRepository([mouse]))
@@ -86,6 +95,62 @@ describe('Swagger (e2e)', () => {
     expect(
       getById.responses['404']!.content['application/json'].schema.$ref,
     ).toContain('ErrorResponseDto');
+  });
+
+  it('documents the transaction and payment endpoints under their tags', async () => {
+    app = await startApp();
+
+    const docs = await request(app.getHttpServer()).get('/docs-json');
+    expect(docs.status).toBe(200);
+
+    const tagNames = docs.body.tags.map((tag: { name: string }) => tag.name);
+    expect(tagNames).toEqual(
+      expect.arrayContaining(['products', 'transactions', 'payments']),
+    );
+
+    const paths = docs.body.paths as Record<
+      string,
+      Record<
+        string,
+        {
+          tags?: string[];
+          responses: Record<
+            string,
+            { content?: Record<string, { schema: { $ref: string } }> }
+          >;
+        }
+      >
+    >;
+
+    expect(Object.keys(paths)).toEqual(
+      expect.arrayContaining([
+        '/transactions',
+        '/transactions/{id}',
+        '/transactions/{id}/payment',
+        '/payments/checkout-config',
+      ]),
+    );
+
+    const create = paths['/transactions'].post;
+    expect(create.tags).toContain('transactions');
+    expect(Object.keys(create.responses)).toEqual(
+      expect.arrayContaining(['201', '400', '404', '409', '500']),
+    );
+
+    const pay = paths['/transactions/{id}/payment'].post;
+    expect(pay.tags).toContain('payments');
+    expect(Object.keys(pay.responses)).toEqual(
+      expect.arrayContaining(['200', '202', '400', '404', '409', '422', '502', '503']),
+    );
+    expect(
+      pay.responses['502'].content?.['application/json'].schema.$ref,
+    ).toContain('ErrorResponseDto');
+
+    const checkout = paths['/payments/checkout-config'].get;
+    expect(checkout.tags).toContain('payments');
+    expect(Object.keys(checkout.responses)).toEqual(
+      expect.arrayContaining(['200', '503', '500']),
+    );
   });
 
   it('relaxes the CSP only under the docs routes and keeps the strict Helmet headers elsewhere', async () => {

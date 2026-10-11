@@ -23,6 +23,8 @@ export const configureSwagger = (app: INestApplication): void => {
     .setTitle('Payment Gateway API')
     .setVersion('1.0')
     .addTag('products')
+    .addTag('transactions')
+    .addTag('payments')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
