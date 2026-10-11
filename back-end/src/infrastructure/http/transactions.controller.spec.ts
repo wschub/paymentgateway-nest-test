@@ -1,4 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, HttpStatus } from '@nestjs/common';
+import type { Response } from 'express';
 import { err, ok } from '../../application/result/result';
 import type { CreateTransactionOutput } from '../../application/use-cases/create-transaction.use-case';
 import { CreateTransactionUseCase } from '../../application/use-cases/create-transaction.use-case';
@@ -27,6 +28,7 @@ const createOutput: CreateTransactionOutput = {
     deliveryFeeInCents: 900000,
     totalInCents: 2700000,
   },
+  replayed: false,
 };
 
 const view: TransactionView = {
@@ -76,10 +78,14 @@ describe('TransactionsController', () => {
   let create: jest.Mock;
   let getById: jest.Mock;
   let controller: TransactionsController;
+  let response: Response & { status: jest.Mock };
 
   beforeEach(() => {
     create = jest.fn();
     getById = jest.fn();
+    response = { status: jest.fn() } as unknown as Response & {
+      status: jest.Mock;
+    };
     controller = new TransactionsController(
       { execute: create } as unknown as CreateTransactionUseCase,
       { execute: getById } as unknown as GetTransactionUseCase,
@@ -90,9 +96,10 @@ describe('TransactionsController', () => {
     it('calls the use case with the body and the idempotency key, then maps the output', async () => {
       create.mockResolvedValue(ok(createOutput));
 
-      const response = await controller.createTransaction(
+      const dto = await controller.createTransaction(
         IDEMPOTENCY_KEY,
         body(),
+        response,
       );
 
       expect(create).toHaveBeenCalledWith({
@@ -111,8 +118,8 @@ describe('TransactionsController', () => {
           notes: 'Ring twice',
         },
       });
-      expect(response).toBeInstanceOf(CreateTransactionResponseDto);
-      expect(response).toEqual({
+      expect(dto).toBeInstanceOf(CreateTransactionResponseDto);
+      expect(dto).toEqual({
         id: 'f0e1',
         reference: 'TXN-7K3F9Q2M8XJA4B6C',
         status: 'PENDING',
@@ -126,23 +133,45 @@ describe('TransactionsController', () => {
       });
     });
 
+    it('answers 201 when the purchase is new', async () => {
+      create.mockResolvedValue(ok(createOutput));
+
+      await controller.createTransaction(IDEMPOTENCY_KEY, body(), response);
+
+      expect(response.status).toHaveBeenCalledWith(HttpStatus.CREATED);
+    });
+
+    it('answers 200 when the purchase is a replay and never leaks the flag', async () => {
+      create.mockResolvedValue(ok({ ...createOutput, replayed: true }));
+
+      const dto = await controller.createTransaction(
+        IDEMPOTENCY_KEY,
+        body(),
+        response,
+      );
+
+      expect(response.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(dto).not.toHaveProperty('replayed');
+    });
+
     it('rejects a missing Idempotency-Key header with 400 before calling the use case', async () => {
       await expect(
-        controller.createTransaction(undefined, body()),
+        controller.createTransaction(undefined, body(), response),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(create).not.toHaveBeenCalled();
+      expect(response.status).not.toHaveBeenCalled();
     });
 
     it('rejects a malformed idempotency key with 400 and never echoes it', async () => {
       const shortKey = 'too-short';
 
       await expect(
-        controller.createTransaction(shortKey, body()),
+        controller.createTransaction(shortKey, body(), response),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       const error = await controller
-        .createTransaction('bad key with spaces', body())
+        .createTransaction('bad key with spaces', body(), response)
         .catch((caught: unknown) => caught);
       expect(JSON.stringify((error as BadRequestException).getResponse())).not.toContain(
         'bad key with spaces',
@@ -157,8 +186,9 @@ describe('TransactionsController', () => {
       create.mockResolvedValue(err(notFound));
 
       await expect(
-        controller.createTransaction(IDEMPOTENCY_KEY, body()),
+        controller.createTransaction(IDEMPOTENCY_KEY, body(), response),
       ).rejects.toBe(notFound);
+      expect(response.status).not.toHaveBeenCalled();
     });
 
     it('forwards an infrastructure error without deciding the status code itself', async () => {
@@ -166,7 +196,7 @@ describe('TransactionsController', () => {
       create.mockResolvedValue(err(failure));
 
       await expect(
-        controller.createTransaction(IDEMPOTENCY_KEY, body()),
+        controller.createTransaction(IDEMPOTENCY_KEY, body(), response),
       ).rejects.toBe(failure);
     });
   });

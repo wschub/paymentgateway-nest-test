@@ -93,11 +93,14 @@ export class InMemoryTransactionRepository implements TransactionRepository {
     }
     const existingByKey = this.byIdempotencyKey.get(input.idempotencyKey);
     if (existingByKey) {
-      return { kind: 'duplicate', transaction: existingByKey };
+      return { kind: 'duplicate', details: this.requireDetails(existingByKey) };
     }
     const existingByReference = this.findByReference(input.reference);
     if (existingByReference) {
-      return { kind: 'duplicate', transaction: existingByReference };
+      return {
+        kind: 'duplicate',
+        details: this.requireDetails(existingByReference),
+      };
     }
 
     const id = `tx-${++this.idCounter}`;
@@ -280,6 +283,16 @@ export class InMemoryTransactionRepository implements TransactionRepository {
       );
     }
     return transaction;
+  }
+
+  private requireDetails(transaction: Transaction): TransactionDetails {
+    const details = this.toDetails(transaction);
+    if (details === null) {
+      throw new DataAccessError(
+        `Transaction with id "${transaction.id}" has no details`,
+      );
+    }
+    return details;
   }
 
   private findByReference(reference: string): Transaction | undefined {

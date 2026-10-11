@@ -1,7 +1,10 @@
 import type { Product } from '../../domain/entities/product.entity';
-import type { TransactionStatus } from '../../domain/entities/transaction.entity';
+import type {
+  Transaction,
+  TransactionStatus,
+} from '../../domain/entities/transaction.entity';
 import { DataAccessError } from '../../domain/errors/data-access.error';
-import { IdempotencyReplayNotSupportedError } from '../../domain/errors/idempotency-replay-not-supported.error';
+import { IdempotencyKeyReusedError } from '../../domain/errors/idempotency-key-reused.error';
 import { InsufficientStockError } from '../../domain/errors/insufficient-stock.error';
 import {
   InvalidTransactionRequestError,
@@ -11,7 +14,10 @@ import { ProductNotFoundError } from '../../domain/errors/product-not-found.erro
 import type { Clock } from '../../domain/ports/clock.port';
 import type { ProductRepository } from '../../domain/ports/product.repository';
 import type { ReferenceGenerator } from '../../domain/ports/reference-generator.port';
-import type { TransactionRepository } from '../../domain/ports/transaction.repository';
+import type {
+  TransactionDetails,
+  TransactionRepository,
+} from '../../domain/ports/transaction.repository';
 import {
   isValidCustomerEmail,
   isValidCustomerFullName,
@@ -66,13 +72,14 @@ export interface CreateTransactionOutput {
   status: TransactionStatus;
   quantity: number;
   amounts: CreateTransactionAmounts;
+  replayed: boolean;
 }
 
 export type CreateTransactionError =
   | InvalidTransactionRequestError
   | ProductNotFoundError
   | InsufficientStockError
-  | IdempotencyReplayNotSupportedError
+  | IdempotencyKeyReusedError
   | DataAccessError;
 
 export class CreateTransactionUseCase {
@@ -91,6 +98,21 @@ export class CreateTransactionUseCase {
     const invalidFields = this.validate(input);
     if (invalidFields.length > 0) {
       return err(new InvalidTransactionRequestError(invalidFields));
+    }
+
+    let existing: TransactionDetails | null;
+    try {
+      existing = await this.transactionRepository.findByIdempotencyKey(
+        input.idempotencyKey,
+      );
+    } catch (error) {
+      if (error instanceof DataAccessError) {
+        return err(error);
+      }
+      throw error;
+    }
+    if (existing !== null) {
+      return this.resolveExisting(existing, input);
     }
 
     let product: Product;
@@ -147,18 +169,7 @@ export class CreateTransactionUseCase {
 
     switch (reserved.kind) {
       case 'created':
-        return ok({
-          id: reserved.transaction.id,
-          reference: reserved.transaction.reference,
-          status: reserved.transaction.status,
-          quantity: reserved.transaction.quantity,
-          amounts: {
-            productAmountInCents: reserved.transaction.productAmountInCents,
-            baseFeeInCents: reserved.transaction.baseFeeInCents,
-            deliveryFeeInCents: reserved.transaction.deliveryFeeInCents,
-            totalInCents: reserved.transaction.totalInCents,
-          },
-        });
+        return ok(this.toOutput(reserved.transaction, false));
       case 'out_of_stock':
         return err(
           new InsufficientStockError(input.productId, input.quantity, product.stock),
@@ -166,8 +177,53 @@ export class CreateTransactionUseCase {
       case 'product_not_found':
         return err(new ProductNotFoundError(input.productId));
       case 'duplicate':
-        return err(new IdempotencyReplayNotSupportedError());
+        return this.resolveExisting(reserved.details, input);
     }
+  }
+
+  private resolveExisting(
+    existing: TransactionDetails,
+    input: CreateTransactionInput,
+  ): Result<CreateTransactionOutput, CreateTransactionError> {
+    if (this.isSameRequest(existing, input)) {
+      return ok(this.toOutput(existing.transaction, true));
+    }
+    return err(
+      new IdempotencyKeyReusedError(
+        input.idempotencyKey,
+        existing.transaction.id,
+      ),
+    );
+  }
+
+  private isSameRequest(
+    existing: TransactionDetails,
+    input: CreateTransactionInput,
+  ): boolean {
+    return (
+      existing.transaction.productId === input.productId &&
+      existing.transaction.quantity === input.quantity &&
+      existing.customer.email === input.customer.email
+    );
+  }
+
+  private toOutput(
+    transaction: Transaction,
+    replayed: boolean,
+  ): CreateTransactionOutput {
+    return {
+      id: transaction.id,
+      reference: transaction.reference,
+      status: transaction.status,
+      quantity: transaction.quantity,
+      amounts: {
+        productAmountInCents: transaction.productAmountInCents,
+        baseFeeInCents: transaction.baseFeeInCents,
+        deliveryFeeInCents: transaction.deliveryFeeInCents,
+        totalInCents: transaction.totalInCents,
+      },
+      replayed,
+    };
   }
 
   private async sweepExpiredReservations(): Promise<void> {

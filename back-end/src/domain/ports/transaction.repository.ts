@@ -16,7 +16,7 @@ export type CreatePendingWithReservedStockResult =
   | { kind: 'created'; transaction: Transaction }
   | { kind: 'out_of_stock' }
   | { kind: 'product_not_found' }
-  | { kind: 'duplicate'; transaction: Transaction };
+  | { kind: 'duplicate'; details: TransactionDetails };
 
 export interface NewCustomerInput {
   fullName: string;

@@ -138,7 +138,7 @@ export class PrismaTransactionRepository implements TransactionRepository {
       ) {
         const existing = await this.findByIdempotencyKey(input.idempotencyKey);
         if (existing !== null) {
-          return { kind: 'duplicate', transaction: existing.transaction };
+          return { kind: 'duplicate', details: existing };
         }
       }
       throw this.wrap(error, CREATE_MESSAGE);

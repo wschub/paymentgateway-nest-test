@@ -61,10 +61,11 @@ Use a product id from `GET /products` (e.g. `77777777-7777-4777-8777-77777777777
 `priceInCents` 1500000).
 
 ```bash
-# 1) Checkout config (public, no secrets)
+# 1) Checkout config (public, no secrets) -> 200 OK
 curl -s localhost:3000/payments/checkout-config
 
-# 2) Create a pending purchase (note the idempotency key; 16-64 chars of letters/digits/dash/underscore)
+# 2) Create a pending purchase -> 201 Created (note the idempotency key;
+#    16-64 chars of letters/digits/dash/underscore)
 curl -s -X POST localhost:3000/transactions \
   -H 'Idempotency-Key: demo-key-00000001' -H 'Content-Type: application/json' \
   -d '{"productId":"77777777-7777-4777-8777-777777777777","quantity":1,
@@ -73,6 +74,7 @@ curl -s -X POST localhost:3000/transactions \
 
 # 2b) Repeat with the same key -> 200 replay, same id/reference, no new purchase, no extra stock reserved
 #     Same key with a different product/quantity/email -> 409 IDEMPOTENCY_KEY_REUSED
+#     Unknown product -> 404 PRODUCT_NOT_FOUND; quantity above stock or maximum of 10 -> 409 / 400
 
 # 3) Tokenize the card with the PUBLIC key and the approved test card. The spike does NOT print the token,
 #    so create one here; copy data.id from the response.
@@ -82,13 +84,19 @@ curl -s -X POST "$UAT_SANDBOX_URL/tokens/cards" \
   -d '{"number":"4242424242424242","cvc":"123","exp_month":"12","exp_year":"29","card_holder":"Test Buyer"}'
 
 # 3b) Start the payment with the token returned in data.id
+#     -> 202 Accepted while the payment is in progress (PENDING), or
+#        200 OK when the provider already answered with a final status at creation
 curl -s -X POST localhost:3000/transactions/<id>/payment \
   -H 'Content-Type: application/json' \
   -d '{"cardToken":"<data.id>","installments":1,"acceptedContracts":true}'
 
-# 4) Poll the source of truth until it leaves PENDING
+# 4) Poll the source of truth until it leaves PENDING -> 200 OK
 curl -s localhost:3000/transactions/<id>
 ```
+
+Status codes at a glance: `201` created · `200` replay / final-at-creation / status read · `202` payment in
+progress · `409` `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED`, `TRANSACTION_NOT_PAYABLE` · `422`
+`CONTRACTS_NOT_ACCEPTED`, `INVALID_PAYMENT_TOKEN`.
 
 ## Expected outcomes
 
@@ -124,17 +132,30 @@ npm run test:e2e      # e2e with the fake gateway (setup-env.ts provides placeho
 npm run test:int      # integration against real PostgreSQL (DB name must end with _test)
 ```
 
-`npm run test:int` reads **`TEST_DATABASE_URL`** (empty in `.env.example`; it never uses `DATABASE_URL`). Before
-running it, create the test database and apply the migrations against that URL:
+`npm run test:int` reads **`TEST_DATABASE_URL`** (empty in `.env.example`; it never uses `DATABASE_URL`). It builds
+its own `PrismaClient` + the real `PrismaTransactionRepository`, truncates every table before each test and covers
+the CHECK constraints and the reserve/claim/finalize/expire race conditions against a real server. It is excluded
+from `test:cov` (unit) and `test:e2e`.
+
+Before running it, create the test database and apply the migrations **to that database only**:
 
 ```bash
 cd back-end
 createdb paymentgateway_test
-TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run prisma:migrate:deploy
-npm run test:int
+# `prisma:migrate:test` copies TEST_DATABASE_URL into DATABASE_URL for this command only,
+# so the development database is never migrated.
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run prisma:migrate:test
+
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/paymentgateway_test npm run test:int
 ```
 
-The suite aborts if the database name does not end with `_test`.
+The suite aborts (before issuing any query) when `TEST_DATABASE_URL` is empty or its database name does not end with
+`_test`. To confirm the migration targeted the test database, compare the applied migrations in each database:
+
+```bash
+psql "$DATABASE_URL"      -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name;'  # development
+psql "$TEST_DATABASE_URL" -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name;'  # test
+```
 
 The sandbox spike (`./scripts/sandbox-spike.sh`) is the only manual check that talks to the provider.
 

@@ -4,8 +4,10 @@ import {
   Controller,
   Get,
   Headers,
+  HttpStatus,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -18,6 +20,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CreateTransactionUseCase } from '../../application/use-cases/create-transaction.use-case';
 import { GetTransactionUseCase } from '../../application/use-cases/get-transaction.use-case';
 import { isValidIdempotencyKey } from '../../domain/rules/transaction.rules';
@@ -71,6 +74,7 @@ export class TransactionsController {
   async createTransaction(
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() body: CreateTransactionDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<CreateTransactionResponseDto> {
     if (
       typeof idempotencyKey !== 'string' ||
@@ -96,6 +100,10 @@ export class TransactionsController {
           notes: body.delivery.notes,
         },
       }),
+    );
+
+    response.status(
+      output.replayed ? HttpStatus.OK : HttpStatus.CREATED,
     );
 
     return toCreateTransactionResponseDto(output);
