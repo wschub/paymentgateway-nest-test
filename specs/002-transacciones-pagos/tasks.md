@@ -133,9 +133,9 @@
 
 **Independent Test**: With fakes and e2e, declined/error cards end with no delivery and the original stock restored; an unpaid expired purchase is released.
 
-- [ ] T049 [US2] Extend `GetTransaction` `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ spec) so `DECLINED`, `VOIDED` and `ERROR` finalize through the repository (release stock, no delivery) (FR-008).
-- [ ] T050 [US2] Add lazy reservation expiry to `back-end/src/application/use-cases/create-transaction.use-case.ts` and `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ their specs): call `releaseExpiredReservations(now)` (injected `Clock`) before reserving and on read; an expired purchase is reported as `VOIDED` with `failureReason = 'RESERVATION_EXPIRED'` and its stock returns (FR-014).
-- [ ] T051 [US2] Write `back-end/test/payment-declined.e2e-spec.ts`: declined and error cards restore stock and assign no delivery; a payment that never started past `RESERVATION_TTL_SECONDS` is released on `GET /transactions/:id` (FR-008, FR-014).
+- [X] T049 [US2] Extend `GetTransaction` `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ spec) so `DECLINED`, `VOIDED` and `ERROR` finalize through the repository (release stock, no delivery) (FR-008).
+- [X] T050 [US2] Add lazy reservation expiry to `back-end/src/application/use-cases/create-transaction.use-case.ts` and `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ their specs): call `releaseExpiredReservations(now)` (injected `Clock`) before reserving and on read; an expired purchase is reported as `VOIDED` with `failureReason = 'RESERVATION_EXPIRED'` and its stock returns (FR-014).
+- [X] T051 [US2] Write `back-end/test/payment-declined.e2e-spec.ts`: declined and error cards restore stock and assign no delivery; a payment that never started past `RESERVATION_TTL_SECONDS` is released on `GET /transactions/:id` (FR-008, FR-014).
 
 ---
 
