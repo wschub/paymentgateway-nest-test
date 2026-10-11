@@ -76,7 +76,7 @@ The provider can notify the store about payment events. The store verifies each 
 ### Edge Cases
 
 - The product is out of stock at payment time, or the requested quantity exceeds the available stock.
-- The quantity is zero or negative (rejected with 400), or the product does not exist (404).
+- The quantity is zero, negative, not an integer, or above the maximum of 10 (rejected with 400), or the product does not exist (404).
 - The card token is missing, invalid or already used.
 - The shopper has not accepted both contracts.
 - The client sends amounts that differ from the server-computed amounts (tampering).
@@ -89,7 +89,7 @@ The provider can notify the store about payment events. The store verifies each 
 ### Functional Requirements
 
 - **FR-001**: Before paying, the store MUST expose the non-secret configuration the browser needs to tokenize a card (the public key and the API base URL) together with the links of the two contracts to accept. No secret may be exposed.
-- **FR-002**: The store MUST create a pending purchase from a product, a quantity, customer data and delivery data, computing all amounts on the server (product amount, base fee, delivery fee) and returning the breakdown. It MUST never trust amounts sent by the client.
+- **FR-002**: The store MUST create a pending purchase from a product, a quantity, customer data and delivery data, computing all amounts on the server (product amount, base fee, delivery fee) and returning the breakdown. The quantity MUST be an integer between 1 and 10 units per purchase. It MUST never trust amounts sent by the client.
 - **FR-003**: Creating a pending purchase MUST honor an `Idempotency-Key` header of 16 to 64 characters from letters, digits, dash or underscore, so that retries and double-clicks never create duplicate purchases. Reusing the same key with a different product, quantity or customer email MUST be rejected with 409 `IDEMPOTENCY_KEY_REUSED`; the same key with the same payload MUST replay the existing purchase.
 - **FR-004**: Creating a pending purchase MUST reserve stock atomically and conditionally, so the stock never becomes negative and two buyers never both receive the last unit.
 - **FR-005**: The store MUST start the payment of a pending purchase using a single-use card token, the number of installments and the acceptance of both contracts, and MUST build the provider request with a server-computed integrity signature. The card number and CVC MUST never reach the store.

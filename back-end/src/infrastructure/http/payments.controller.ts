@@ -9,14 +9,15 @@ import {
 } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
+  ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
-  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -43,9 +44,9 @@ export class PaymentsController {
     type: CheckoutConfigResponseDto,
     description: 'Public, non-secret configuration for the checkout',
   })
-  @ApiUnauthorizedResponse({
+  @ApiServiceUnavailableResponse({
     type: ErrorResponseDto,
-    description: 'Unexpected server error',
+    description: 'The payment provider is temporarily unavailable',
   })
   @ApiInternalServerErrorResponse({
     type: ErrorResponseDto,
@@ -83,9 +84,13 @@ export class PaymentsController {
     type: ErrorResponseDto,
     description: 'Contracts not accepted or the payment token is invalid',
   })
-  @ApiUnauthorizedResponse({
+  @ApiBadGatewayResponse({
     type: ErrorResponseDto,
-    description: 'The payment provider rejected the request',
+    description: 'The payment provider rejected the transaction',
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorResponseDto,
+    description: 'The payment provider is temporarily unavailable',
   })
   @ApiInternalServerErrorResponse({
     type: ErrorResponseDto,

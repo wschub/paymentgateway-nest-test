@@ -27,5 +27,6 @@ export const PRODUCTS_REPOSITORY = Symbol('PRODUCTS_REPOSITORY');
       inject: [PRODUCTS_REPOSITORY],
     },
   ],
+  exports: [PRODUCTS_REPOSITORY],
 })
 export class ProductsModule {}

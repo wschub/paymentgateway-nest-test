@@ -148,6 +148,8 @@ describe('TransactionRepository port', () => {
   });
 
   it('releases expired reservations', async () => {
-    await expect(repository.releaseExpiredReservations(new Date())).resolves.toBe(0);
+    await expect(
+      repository.releaseExpiredReservations(new Date(), 900),
+    ).resolves.toBe(0);
   });
 });

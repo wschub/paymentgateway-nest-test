@@ -34,6 +34,7 @@ export class FakePaymentGateway implements PaymentGateway {
   private readonly calls: RecordedGatewayCall[] = [];
   private idCounter = 0;
   private merchantInfoUnavailable = false;
+  private readUnavailable = false;
 
   constructor(private readonly merchantInfo: MerchantInfo) {}
 
@@ -73,6 +74,24 @@ export class FakePaymentGateway implements PaymentGateway {
 
   simulateMerchantUnavailable(): void {
     this.merchantInfoUnavailable = true;
+  }
+
+  simulateReadUnavailable(): void {
+    this.readUnavailable = true;
+  }
+
+  setStatusByReference(
+    reference: string,
+    status: ProviderTransactionStatus,
+    statusMessage: string | null = null,
+  ): boolean {
+    const transaction = this.transactionsByReference.get(reference);
+    if (transaction === undefined) {
+      return false;
+    }
+    transaction.status = status;
+    transaction.statusMessage = statusMessage;
+    return true;
   }
 
   recordedCalls(): readonly RecordedGatewayCall[] {
@@ -131,6 +150,9 @@ export class FakePaymentGateway implements PaymentGateway {
 
   async getTransaction(id: string): Promise<ProviderTransaction> {
     this.calls.push({ method: 'getTransaction', id });
+    if (this.readUnavailable) {
+      throw new PaymentProviderUnavailableError('network');
+    }
     const transaction = this.transactionsById.get(id);
     if (transaction === undefined) {
       throw new PaymentProviderRejectedError(404);
@@ -140,6 +162,9 @@ export class FakePaymentGateway implements PaymentGateway {
 
   async findByReference(reference: string): Promise<ProviderTransaction | null> {
     this.calls.push({ method: 'findByReference', reference });
+    if (this.readUnavailable) {
+      throw new PaymentProviderUnavailableError('network');
+    }
     return this.transactionsByReference.get(reference) ?? null;
   }
 

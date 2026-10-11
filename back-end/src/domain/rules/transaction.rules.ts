@@ -7,6 +7,7 @@ export const IDEMPOTENCY_KEY_MAX_LENGTH = 64;
 export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
 export const MIN_QUANTITY = 1;
+export const MAX_QUANTITY = 10;
 export const MIN_INSTALLMENTS = 1;
 
 export const isValidReference = (value: unknown): boolean =>
@@ -16,7 +17,10 @@ export const isValidIdempotencyKey = (value: unknown): boolean =>
   typeof value === 'string' && IDEMPOTENCY_KEY_PATTERN.test(value);
 
 export const isValidQuantity = (value: unknown): boolean =>
-  typeof value === 'number' && Number.isInteger(value) && value >= MIN_QUANTITY;
+  typeof value === 'number' &&
+  Number.isInteger(value) &&
+  value >= MIN_QUANTITY &&
+  value <= MAX_QUANTITY;
 
 export const isValidInstallments = (value: unknown): boolean =>
   typeof value === 'number' && Number.isInteger(value) && value >= MIN_INSTALLMENTS;

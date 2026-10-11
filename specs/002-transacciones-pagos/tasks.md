@@ -118,10 +118,10 @@
 
 ## Phase 6: User Story 1 - End-to-end tests (fake gateway)
 
-- [ ] T045 [US1] Write `back-end/test/checkout-config.e2e-spec.ts`: `GET /payments/checkout-config` with the `PaymentGateway` provider overridden by `FakePaymentGateway` and `global.fetch` guarded (FR-001).
-- [ ] T046 [US1] Write `back-end/test/transaction-create.e2e-spec.ts`: `POST /transactions` success (201), missing/invalid `Idempotency-Key` (400), unknown product (404) and **client-sent amounts rejected (400)** (FR-002, FR-003).
-- [ ] T047 [US1] Write `back-end/test/transaction-payment.e2e-spec.ts`: `POST /transactions/:id/payment` approved path (202 then 200) and `acceptedContracts:false` (422); **assert no response body contains a card number, CVC, card token or secret** (FR-005, FR-012).
-- [ ] T048 [US1] Write `back-end/test/transaction-status.e2e-spec.ts`: `GET /transactions/:id` pending → approved with an assigned delivery; unknown id → 404 (FR-007).
+- [X] T045 [US1] Write `back-end/test/checkout-config.e2e-spec.ts`: `GET /payments/checkout-config` with the `PaymentGateway` provider overridden by `FakePaymentGateway` and `global.fetch` guarded (FR-001).
+- [X] T046 [US1] Write `back-end/test/transaction-create.e2e-spec.ts`: `POST /transactions` success (201), missing/invalid `Idempotency-Key` (400), unknown product (404) and **client-sent amounts rejected (400)** (FR-002, FR-003).
+- [X] T047 [US1] Write `back-end/test/transaction-payment.e2e-spec.ts`: `POST /transactions/:id/payment` approved path (202 then 200) and `acceptedContracts:false` (422); **assert no response body contains a card number, CVC, card token or secret** (FR-005, FR-012).
+- [X] T048 [US1] Write `back-end/test/transaction-status.e2e-spec.ts`: `GET /transactions/:id` pending → approved with an assigned delivery; unknown id → 404 (FR-007).
 
 **Checkpoint**: US1 is independently testable end-to-end through HTTP with no network.
 
@@ -133,9 +133,9 @@
 
 **Independent Test**: With fakes and e2e, declined/error cards end with no delivery and the original stock restored; an unpaid expired purchase is released.
 
-- [ ] T049 [US2] Extend `GetTransaction` `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ spec) so `DECLINED`, `VOIDED` and `ERROR` finalize through the repository (release stock, no delivery) (FR-008).
-- [ ] T050 [US2] Add lazy reservation expiry to `back-end/src/application/use-cases/create-transaction.use-case.ts` and `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ their specs): call `releaseExpiredReservations(now)` (injected `Clock`) before reserving and on read; an expired purchase is reported as `VOIDED` with `failureReason = 'RESERVATION_EXPIRED'` and its stock returns (FR-014).
-- [ ] T051 [US2] Write `back-end/test/payment-declined.e2e-spec.ts`: declined and error cards restore stock and assign no delivery; a payment that never started past `RESERVATION_TTL_SECONDS` is released on `GET /transactions/:id` (FR-008, FR-014).
+- [X] T049 [US2] Extend `GetTransaction` `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ spec) so `DECLINED`, `VOIDED` and `ERROR` finalize through the repository (release stock, no delivery) (FR-008).
+- [X] T050 [US2] Add lazy reservation expiry to `back-end/src/application/use-cases/create-transaction.use-case.ts` and `back-end/src/application/use-cases/get-transaction.use-case.ts` (+ their specs): call `releaseExpiredReservations(now)` (injected `Clock`) before reserving and on read; an expired purchase is reported as `VOIDED` with `failureReason = 'RESERVATION_EXPIRED'` and its stock returns (FR-014).
+- [X] T051 [US2] Write `back-end/test/payment-declined.e2e-spec.ts`: declined and error cards restore stock and assign no delivery; a payment that never started past `RESERVATION_TTL_SECONDS` is released on `GET /transactions/:id` (FR-008, FR-014).
 
 ---
 

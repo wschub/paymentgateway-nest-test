@@ -29,6 +29,7 @@ import {
   isValidQuantity,
 } from '../../domain/rules/transaction.rules';
 import type { FeesConfig } from '../../domain/value-objects/fees-config';
+import type { AppConfigValues } from '../config-values';
 import { err, ok, type Result } from '../result/result';
 
 export interface CreateCustomerInput {
@@ -81,6 +82,7 @@ export class CreateTransactionUseCase {
     private readonly feesConfig: FeesConfig,
     private readonly clock: Clock,
     private readonly referenceGenerator: ReferenceGenerator,
+    private readonly config: AppConfigValues,
   ) {}
 
   async execute(
@@ -109,6 +111,8 @@ export class CreateTransactionUseCase {
     const baseFeeInCents = this.feesConfig.baseFeeInCents;
     const deliveryFeeInCents = this.feesConfig.deliveryFeeInCents;
     const totalInCents = productAmountInCents + baseFeeInCents + deliveryFeeInCents;
+
+    await this.sweepExpiredReservations();
 
     let reserved;
     try {
@@ -163,6 +167,19 @@ export class CreateTransactionUseCase {
         return err(new ProductNotFoundError(input.productId));
       case 'duplicate':
         return err(new IdempotencyReplayNotSupportedError());
+    }
+  }
+
+  private async sweepExpiredReservations(): Promise<void> {
+    try {
+      await this.transactionRepository.releaseExpiredReservations(
+        this.clock.now(),
+        this.config.reservationTtlSeconds,
+      );
+    } catch (error) {
+      if (!(error instanceof DataAccessError)) {
+        throw error;
+      }
     }
   }
 

@@ -35,12 +35,10 @@ describe('InMemoryTransactionRepository', () => {
   const factory = (
     stock: number,
     productId: string = input.productId,
-    ttlSeconds = 900,
   ): InMemoryTransactionRepository =>
     new InMemoryTransactionRepository(
       clock,
       new Map([[productId, { name: 'Wireless Mouse', stock }]]),
-      ttlSeconds,
     );
 
   describe('createPendingWithReservedStock', () => {
@@ -196,7 +194,10 @@ describe('InMemoryTransactionRepository', () => {
       if (created.kind !== 'created') throw new Error('expected created');
 
       const afterTtl = new Date(now.getTime() + 901 * 1000);
-      const released = await repository.releaseExpiredReservations(afterTtl);
+      const released = await repository.releaseExpiredReservations(
+        afterTtl,
+        900,
+      );
 
       expect(released).toBe(1);
       const details = await repository.findById(created.transaction.id);
@@ -210,6 +211,7 @@ describe('InMemoryTransactionRepository', () => {
 
       const released = await repository.releaseExpiredReservations(
         new Date(now.getTime() + 899 * 1000),
+        900,
       );
 
       expect(released).toBe(0);
@@ -223,6 +225,7 @@ describe('InMemoryTransactionRepository', () => {
 
       const released = await repository.releaseExpiredReservations(
         new Date(now.getTime() + 3600 * 1000),
+        900,
       );
 
       expect(released).toBe(0);

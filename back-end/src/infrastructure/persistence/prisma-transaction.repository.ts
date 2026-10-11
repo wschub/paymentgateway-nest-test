@@ -44,7 +44,6 @@ export class PrismaTransactionRepository implements TransactionRepository {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clock: Clock,
-    private readonly reservationTtlSeconds: number,
   ) {}
 
   async findById(id: string): Promise<TransactionDetails | null> {
@@ -251,9 +250,12 @@ export class PrismaTransactionRepository implements TransactionRepository {
     }
   }
 
-  async releaseExpiredReservations(now: Date): Promise<number> {
+  async releaseExpiredReservations(
+    now: Date,
+    ttlSeconds: number,
+  ): Promise<number> {
     try {
-      const cutoff = new Date(now.getTime() - this.reservationTtlSeconds * 1000);
+      const cutoff = new Date(now.getTime() - ttlSeconds * 1000);
       const expired = await this.prisma.transaction.findMany({
         where: {
           status: 'PENDING',

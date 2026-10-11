@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -18,7 +19,7 @@ import {
   PHONE_PATTERN,
 } from '../../domain/rules/customer.rules';
 import { NOTES_MAX_LENGTH } from '../../domain/rules/delivery.rules';
-import { MIN_QUANTITY } from '../../domain/rules/transaction.rules';
+import { MAX_QUANTITY, MIN_QUANTITY } from '../../domain/rules/transaction.rules';
 
 const trimmed = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -79,9 +80,15 @@ export class CreateTransactionDto {
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: 1, minimum: MIN_QUANTITY })
+  @ApiProperty({
+    example: 1,
+    minimum: MIN_QUANTITY,
+    maximum: MAX_QUANTITY,
+    description: `Between ${MIN_QUANTITY} and ${MAX_QUANTITY} units`,
+  })
   @IsInt()
   @Min(MIN_QUANTITY)
+  @Max(MAX_QUANTITY)
   quantity!: number;
 
   @ApiProperty({ type: () => CreateCustomerDto })

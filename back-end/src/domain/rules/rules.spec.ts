@@ -102,11 +102,13 @@ describe('domain rules', () => {
       expect(isValidIdempotencyKey(42)).toBe(false);
     });
 
-    it('validates the quantity as an integer of at least 1', () => {
+    it('validates the quantity as an integer between 1 and 10', () => {
       expect(isValidQuantity(1)).toBe(true);
       expect(isValidQuantity(7)).toBe(true);
+      expect(isValidQuantity(10)).toBe(true);
       expect(isValidQuantity(0)).toBe(false);
       expect(isValidQuantity(-2)).toBe(false);
+      expect(isValidQuantity(11)).toBe(false);
       expect(isValidQuantity(1.5)).toBe(false);
       expect(isValidQuantity('2')).toBe(false);
       expect(isValidQuantity(Number.NaN)).toBe(false);
