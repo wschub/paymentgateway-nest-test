@@ -64,6 +64,8 @@ Validation rules from the spec:
 | `delivery` | `DeliveryData \| null` | non-sensitive; personal, cleared at the end |
 | `transactionId` | string \| null | set once the purchase is recorded |
 
+A purchase is considered started when `selectedProductId` is present and `quantity` is an integer between 1
+and 10. The stored document is invalid if it claims a started purchase without both conditions.
 `DeliveryData` (whitelisted, non-sensitive): `fullName`, `email`, `phone`, `address`, `city`, `region`,
 `notes?`. There is **no** card field.
 
@@ -83,12 +85,12 @@ Validation rules from the spec:
 |---------|--------|
 | whitelisted part changed (shallow comparison) | write `{ version, savedAt, whitelist }` to `localStorage` |
 | whitelisted part unchanged | no write |
-| any `localStorage` access fails | ignored via `try/catch`; the app never breaks |
-| app load | read, validate shape + version + age (24 h); then validate `selectedProductId` against the API while the gallery is shown; a `notFound` discards all progress |
+| app startup | read synchronously to produce preloaded state (schema, version, age); subscriber initialized with that document as last written (never overwrites with empty) |
+| restoreProgress runs asynchronously | notFound → discard all; 429/network/server → keep restored progress, retry later (e.g. when product page opens) |
 | purchase reaches final step and shopper leaves | remove the stored document |
 | shopper starts over | remove the stored document |
 | `savedAt` older than 24 h | discard on load |
-
+| no write while validation is pending | thunks must not cause subscriber to overwrite during async validation |
 ## Persisted document (`localStorage`)
 
 Single versioned document; the exact contract is in `contracts/persistence.md`.

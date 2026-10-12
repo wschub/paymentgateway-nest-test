@@ -38,8 +38,10 @@ Deployment is a static SPA with an `index.html` fallback and a build-time `VITE_
 `@tailwindcss/vite`, `@testing-library/react` and the starter TypeScript version is verified at install time;
 an incompatible package is pinned to a supported version (never `--force` or `--legacy-peer-deps`).
 
-**Storage**: Browser `localStorage` only, for the versioned non-sensitive checkout whitelist. No server
-persistence; no card data.
+**Storage**: Browser `localStorage` only, for the versioned non-sensitive checkout whitelist, read
+synchronously on store creation to preload state. Product validation of a persisted `selectedProductId` is
+an asynchronous thunk (`src/features/checkout/checkout.thunks.ts`) separate from the pure storage layer. No
+server persistence; no card data.
 
 **Target Platform**: Modern desktop and mobile browsers (mobile-first from 375×667 CSS px up to desktop).
 Local development on macOS.
@@ -115,9 +117,11 @@ front-end/
 │   └── images/
 │       ├── fallback.svg                 # local fallback shown when a product image fails
 │       └── products/                    # 9 product WebP images (already present)
-└── src/
-    ├── main.tsx                         # bootstrap (excluded from coverage)
-    ├── config.ts                        # ONLY place reading import.meta.env (VITE_API_URL)
+    └── src/
+        ├── main.tsx                         # bootstrap (excluded from coverage)
+        ├── config.ts                        # ONLY place reading import.meta.env (VITE_API_URL)
+        ├── shared/
+            ├── constants.ts                  # shared constants (e.g. MAX_QUANTITY_PER_PURCHASE)
     ├── __mocks__/
     │   └── config.ts                    # Jest test double mapped to ^@/config$
     ├── app/
@@ -136,10 +140,11 @@ front-end/
     │   │   ├── ProductPage.tsx          # detail page + quantity selector + purchase button
     │   │   ├── QuantitySelector.tsx     # keyboard-operable, bounded 1..min(stock,10)
     │   │   └── product.selectors.ts
-    │   └── checkout/
-    │       ├── checkout.slice.ts        # step, selectedProductId, quantity, delivery, transactionId
-    │       ├── checkout.selectors.ts
-    │       └── persistence.ts           # versioned whitelist read/write, shallow change check, try/catch, 24h age, discard rules
+        │   └── checkout/
+        │       ├── checkout.slice.ts        # step, selectedProductId, quantity, delivery, transactionId
+        │       ├── checkout.selectors.ts
+        │       ├── checkout.thunks.ts       # async restoreProgress validates persisted product
+        │       └── persistence.ts           # pure sync storage: versioned whitelist read/write, shallow compare, try/catch, 24h age, schema check
     └── shared/
         ├── api/
         │   ├── http.ts                  # fetch wrapper: timeout + typed error kinds
@@ -150,6 +155,7 @@ front-end/
         │   ├── Spinner.tsx
         │   ├── ErrorState.tsx           # friendly message + retry
         │   └── EmptyState.tsx
+        ├── constants.ts                  # shared constants (e.g. MAX_QUANTITY_PER_PURCHASE)
         └── format/
             └── money.ts                 # Intl.NumberFormat es-CO / COP, cents ÷ 100
 ```

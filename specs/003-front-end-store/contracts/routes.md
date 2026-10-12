@@ -20,6 +20,11 @@ renders that page. The static host must fall back to `index.html` for unknown pa
 - Navigation uses real links (`<Link>`) so keyboard and screen-reader users can move between pages.
 - After each route change, focus moves to the page heading so the new page content is announced.
 - Query strings and hashes are not used as state; checkout progress lives in the store, not in the URL.
+- **URL precedence:** the address decides which product page is shown. If persisted progress references a
+  different `selectedProductId`, it does not prefill that quantity or show the next-step notice on another
+  product's page; opening another product leaves the stored selection untouched until the shopper starts a new
+  purchase on that page, which replaces it. The restored selection (quantity prefilled and next-step notice)
+  appears only when the page matches the selected product.
 
 ## Deployment note (static hosting)
 

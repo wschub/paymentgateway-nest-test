@@ -38,9 +38,12 @@ technology stack. No open NEEDS CLARIFICATION remains.
   versioned, non-sensitive whitelist — `{ version, savedAt, currentStep, selectedProductId, quantity,
   delivery, transactionId }` — under one `localStorage` key. Every `localStorage` access is wrapped in
   `try/catch` so a storage failure (quota exceeded, storage disabled) never breaks the app. On startup the
-  loader validates the shape against the schema and discards anything invalid or older than 24 hours; a
-  persisted `selectedProductId` is validated against the API by fetching it while the gallery is shown, and a
-  `notFound` discards all progress (see R11).
+  loader reads synchronously to produce the preloaded checkout state (shape, version, 24 hour age); the
+  subscriber is initialized with that document as its last written value so it never overwrites stored
+  progress with an empty state. Product validation of a persisted `selectedProductId` is handled by an
+  asynchronous thunk `restoreProgress` (`src/features/checkout/checkout.thunks.ts`) separate from the pure
+  storage layer: on `notFound` it discards all progress; on transient `429`, `network`, or `server` errors it
+  keeps the restored progress and retries validation when the product page opens.
 - **Rationale**: The user explicitly excludes `redux-persist` and asks for a "custom store subscriber writing
   a versioned whitelist with a timestamp". A whitelist object (not the whole state) guarantees no card field
   can leak even if the state later grows; the shallow comparison avoids needless writes on every action.
@@ -143,12 +146,16 @@ technology stack. No open NEEDS CLARIFICATION remains.
 
 - **Decision**: Persisted progress is written on relevant changes only (shallow comparison of the whitelisted
   part; see R3) and cleared when the purchase reaches its final step and the shopper leaves it, when the
-  shopper chooses to start over (an explicit reset action) and when the stored `savedAt` is older than 24
-  hours. Every `localStorage` access is wrapped in `try/catch` so a failure never breaks the app. Loading
-  validates the schema, the version and the age, then validates a persisted `selectedProductId` against the
-  API: the gallery is shown while the product is fetched, and a `notFound` discards all progress. Anything
-  invalid discards the document and starts from the gallery. Delivery data is personal and is removed with the
-  rest of the progress at the end of the purchase.
+  shopper chooses to start over (explicit reset action plus a visible "Start over" control on the next-step
+  placeholder), and when the stored `savedAt` is older than 24 hours. Progress is persisted only when a
+  purchase has been started (`selectedProductId` present and `quantity` an integer between 1 and 10); a
+  document violating that is invalid. Every `localStorage` access is wrapped in `try/catch` so a failure never
+  breaks the app. Loading reads synchronously to produce preloaded checkout state (schema, version, age),
+  initializing the subscriber with that last-written value so it never overwrites stored progress with an empty
+  state. Product validation is asynchronous via `restoreProgress` (`src/features/checkout/checkout.thunks.ts`):
+  while validation is pending, no write overwrites state; on `notFound` all progress is discarded; on `429`,
+  `network`, or `server` errors the restored progress is kept and validation is retried when the product page
+  opens. Delivery data is personal and is removed with the rest of the progress at the end of the purchase.
 - **Rationale**: FR-012/FR-014/FR-021 and the updated spec scenarios on lifecycle and personal data.
 - **Alternatives considered**: Never expiring (rejected: leaves personal delivery data indefinitely); a TTL
   per field (rejected: over-complex; one document TTL is enough); trusting a persisted product id without an

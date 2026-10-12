@@ -88,6 +88,10 @@ restored; seed a persisted state pointing at a non-existent product and confirm 
    restored (they are never persisted).
 4. **Given** the shopper has opened a product detail page, **When** the page is reloaded, **Then** the app
    shows the same product detail page (by product id).
+5. **Given** persisted progress that selected product A with a quantity, **When** the shopper opens the
+   address of a different product B, **Then** the app shows product B (the address decides the page) and does
+   not prefill A's quantity or show the next-step notice; A's stored selection is left untouched until the
+   shopper starts a new purchase on B, which replaces it.
 
 ---
 
@@ -124,16 +128,16 @@ restored; seed a persisted state pointing at a non-existent product and confirm 
 - **FR-007**: The product detail page MUST provide a quantity selector bounded between 1 and the smaller of
   the available stock and ten units.
 - **FR-008**: The system MUST prevent a selected quantity from exceeding the available stock. The product data
-  (including stock) MUST be re-read when the product page opens, when the browser tab becomes visible again,
-  and right before the purchase choice is recorded. If the stock is no longer enough, the shopper MUST be told
-  and the quantity MUST be adjusted to what remains, or the purchase MUST be blocked when nothing remains.
+  (including stock) MUST be re-read on the three shared triggers defined here, which FR-010 refers to: when the
+  product page opens, when the browser tab becomes visible again, and right before the purchase choice is
+  recorded. If the stock is no longer enough, the shopper MUST be told and the quantity MUST be adjusted to
+  what remains, or the purchase MUST be blocked when nothing remains.
 - **FR-009**: The product detail page MUST provide a button that starts the purchase; it MUST record the
   selected product and quantity and show a clear "next step" placeholder (the card form is a later feature).
-- **FR-010**: When a product is removed or becomes out of stock while the shopper is on its page (including
-  after a re-read of product data), the system MUST inform the shopper and prevent starting the purchase. The
-  product data MUST be re-read when the product page opens, when the browser tab becomes visible again, and
-  right before the purchase choice is recorded; if stock is no longer enough the shopper is told and the
-  quantity is adjusted to what remains, or the purchase is blocked when nothing remains.
+- **FR-010**: When a product is removed or becomes out of stock while the shopper is on its page (including as
+  a result of the re-read triggers defined in FR-008), the system MUST inform the shopper and prevent starting
+  the purchase; if stock is no longer enough the shopper is told and the quantity is adjusted to what remains,
+  or the purchase is blocked when nothing remains.
 - **FR-011**: The system MUST keep the checkout progress in a single central store containing the current
   step (product page, card and delivery, summary, final status), the selected product, the quantity, the
   delivery data and the transaction id.
@@ -150,12 +154,15 @@ restored; seed a persisted state pointing at a non-existent product and confirm 
   page with a link back to the gallery.
 - **FR-018**: The layout MUST be mobile-first and MUST work from a 375x667 CSS-pixel viewport up to desktop
   with no horizontal overflow.
-- **FR-019**: Images MUST use a light-weight format with fixed dimensions, MUST be lazy-loaded below the
-  fold, and MUST show a fallback when an image fails to load.
+- **FR-019**: Images MUST use a light-weight format — WebP files of at most about 40 KB — with fixed
+  dimensions, MUST be lazy-loaded below the fold, and MUST show a fallback when an image fails to load.
 - **FR-020**: The interface MUST support keyboard navigation, visible focus, labels for interactive elements
   and alternative text for images.
 - **FR-021**: Persisted progress MUST be cleared when the purchase reaches its final step and the shopper
-  leaves it, when the shopper chooses to start over, and when it is older than 24 hours.
+  leaves it, when the shopper chooses to start over (via a visible "Start over" control on the next-step
+  placeholder), and when it is older than 24 hours. The final status screen is out of scope; a
+  `purchaseCompleted` action that clears the progress is provided and tested so the final screen can wire it
+  later.
 - **FR-022**: Front-end automated tests (Jest) MUST cover the central store logic, the page behaviors and the
   refresh-restore behavior, keeping overall front-end coverage above 80%.
 

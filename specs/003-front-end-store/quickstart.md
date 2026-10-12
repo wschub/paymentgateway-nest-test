@@ -47,6 +47,8 @@ npm run dev            # http://localhost:5173
 8. **Stale-response guard**: open a product, then tap through several product links quickly → the shown page
    always matches the last link tapped, never an earlier, slower response.
 9. **Responsive**: at 375×667 (device toolbar) there is no horizontal overflow; layout scales up to desktop.
+   With viewport at 375×667, open the gallery, a product page and the not-found page and verify in the console:
+   `document.documentElement.scrollWidth <= window.innerWidth` is `true` for each.
 10. **Accessibility**: tab through the page; focus is always visible, the quantity selector and purchase
     button are operable with the keyboard, and product images have `alt` text. After any route change, focus
     lands on the page heading. Stock changes and errors are announced through live regions (polite for stock,

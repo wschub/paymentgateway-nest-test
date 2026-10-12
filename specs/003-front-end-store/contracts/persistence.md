@@ -53,15 +53,18 @@ Any other key in the stored object is ignored on read (whitelist) and never writ
 
 ## Read rules (on app start)
 
-1. No document → start from the gallery.
-2. Not valid JSON, or wrong `version`, or missing/invalid fields → discard the document.
-3. `now - savedAt > 24 h` → discard the document (FR-021).
-4. `selectedProductId` is validated against the API: `GET /products/:id` is fetched while the gallery is
-   shown. A `notFound` (product removed) discards all progress (FR-014).
-5. Otherwise restore the progress and continue from `currentStep`.
+1. Read synchronously on store creation to preload the checkout state (using the validated shape). If invalid, the preloaded state is empty.
+2. Not valid JSON, or wrong `version`, or missing/invalid fields → discard (preload empty).
+3. `now - savedAt > 24 h` → discard (preload empty).
+4. A started purchase requires `selectedProductId` present and `quantity` an integer between 1 and 10; otherwise discard.
+5. The subscriber is initialized with that validated document as its "last written value", so it never overwrites stored progress with an empty state.
+6. Product validation of `selectedProductId` is asynchronous via `restoreProgress` (`src/features/checkout/checkout.thunks.ts`). 
+   - `notFound` → discard all progress
+   - `429`, `network`, or `server` → keep the restored progress and retry validation when the product page opens (or on retry)
+   - while validation is pending, no write occurs from that validation path; the UI shows the appropriate page (gallery while validating, product page if restored)
+7. Otherwise restore the progress and continue from `currentStep`.
 
-Discarding means removing the stored document and starting from the gallery. Validation never leaves the app
-in a broken state: while the API check is in flight the shopper sees the gallery, not a blank screen.
+Discarding means removing the stored document. The synchronous preload never leaves the app in a broken state; async validation may keep progress through transient errors.
 
 ## Clear rules
 
