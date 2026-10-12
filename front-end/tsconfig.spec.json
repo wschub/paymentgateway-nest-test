@@ -12,9 +12,9 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "verbatimModuleSyntax": false,
-    "baseUrl": ".",
+    "verbatimModuleSyntax": false,
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "types": ["jest", "node", "@testing-library/jest-dom"]
   },
