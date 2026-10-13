@@ -143,7 +143,27 @@ describe('loadPersistedProgress', () => {
       contractsAccepted: false,
       paymentStatus: 'idle',
       paymentError: null,
+      transaction: null,
+      lastReadRequestId: null,
     })
+  })
+
+  it('preloads the verifying state when a transaction id was restored', () => {
+    const stored = validStored({
+      currentStep: 'finalStatus',
+      transactionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      idempotencyKey: 'Abcdefghijklmnop1234',
+    })
+    const { storage } = createFakeStorage({
+      [PERSISTENCE_STORAGE_KEY]: JSON.stringify(stored),
+    })
+
+    const preloaded = toCheckoutState(loadPersistedProgress(storage)!)
+
+    expect(preloaded.currentStep).toBe('finalStatus')
+    expect(preloaded.transactionId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+    expect(preloaded.paymentStatus).toBe('pending')
+    expect(preloaded.transaction).toBeNull()
   })
 
   it.each([

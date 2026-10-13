@@ -1,5 +1,13 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
-import { startOver, type CheckoutState, type DeliveryData } from '@/features/checkout/checkout.slice'
+import {
+  checkoutStepChanged,
+  startOver,
+  transactionReadFailed,
+  transactionReadStarted,
+  transactionReceived,
+  type CheckoutState,
+  type DeliveryData,
+} from '@/features/checkout/checkout.slice'
 import {
   fetchProduct,
   quantityChanged as productQuantityChanged,
@@ -9,7 +17,12 @@ import type { CheckoutConfig, TransactionView } from '@/features/checkout/checko
 import { httpRequest, isApiError } from '@/shared/api/http'
 import type { ApiError } from '@/shared/api/api.errors'
 
-export type RestoreOutcome = 'noop' | 'kept' | 'transient' | 'discarded'
+export type RestoreOutcome =
+  | 'noop'
+  | 'kept'
+  | 'transient'
+  | 'discarded'
+  | 'verifying'
 
 interface RestoreProgressState {
   checkout: CheckoutState
@@ -28,6 +41,12 @@ export const restoreProgress = createAsyncThunk<
   const result = await dispatch(fetchProduct(selectedProductId))
   if (fetchProduct.fulfilled.match(result)) {
     dispatch(productQuantityChanged(quantity))
+    const { transactionId, currentStep } = getState().checkout
+    if (transactionId && currentStep === 'finalStatus') {
+      dispatch(checkoutStepChanged('finalStatus'))
+      void dispatch(readTransactionStatus(transactionId))
+      return 'verifying'
+    }
     return 'kept'
   }
 
@@ -108,3 +127,34 @@ export const payTransaction = createAsyncThunk<
   }
   return result
 })
+
+export const readTransactionStatus = createAsyncThunk<
+  TransactionView,
+  string,
+  { state: RestoreProgressState; rejectValue: ApiError }
+>(
+  'checkout/readTransactionStatus',
+  async (transactionId, { dispatch, getState, rejectWithValue, requestId }) => {
+    dispatch(transactionReadStarted(requestId))
+
+    const result = await httpRequest<TransactionView>(
+      `/transactions/${transactionId}`,
+      { map400ToNotFound: true },
+    )
+
+    if (getState().checkout.lastReadRequestId !== requestId) {
+      if (isApiError(result)) {
+        return rejectWithValue(result)
+      }
+      return result
+    }
+
+    if (isApiError(result)) {
+      dispatch(transactionReadFailed(result))
+      return rejectWithValue(result)
+    }
+
+    dispatch(transactionReceived(result))
+    return result
+  },
+)

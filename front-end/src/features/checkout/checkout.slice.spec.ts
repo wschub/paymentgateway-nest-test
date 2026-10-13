@@ -7,18 +7,43 @@ import checkoutReducer, {
   paymentErrorCleared,
   paymentFailed,
   paymentStatusChanged,
+  paymentStatusFromTransaction,
   purchaseCompleted,
   purchaseStarted,
   quantityChanged,
   restored,
   startOver,
+  transactionReadFailed,
+  transactionReadStarted,
+  transactionReceived,
   type CheckoutState,
 } from '@/features/checkout/checkout.slice'
 import {
   INSTALLMENTS_DEFAULT,
   MAX_QUANTITY_PER_PURCHASE,
 } from '@/shared/constants'
+import type { TransactionView } from '@/features/checkout/checkout.types'
 import { createApiError } from '@/shared/api/api.errors'
+
+const buildTransactionView = (
+  overrides: Partial<TransactionView> = {},
+): TransactionView => ({
+  id: 'tx-1',
+  reference: 'REF-1',
+  status: 'PENDING',
+  quantity: 2,
+  amounts: {
+    productAmountInCents: 7000000,
+    baseFeeInCents: 500000,
+    deliveryFeeInCents: 1200000,
+    totalInCents: 8700000,
+  },
+  card: null,
+  product: { id: 'p1', name: 'Mouse', quantity: 2 },
+  delivery: null,
+  failureReason: null,
+  ...overrides,
+})
 
 const CARD_LIKE = /card|cvc|cvv|pan|number|expiry|expiration|security/i
 const ALLOWED_CARD_LIKE = new Set(['cardBrand', 'cardLastFour'])
@@ -58,6 +83,8 @@ const cleanState = {
   contractsAccepted: false,
   paymentStatus: 'idle' as const,
   paymentError: null,
+  transaction: null,
+  lastReadRequestId: null,
 }
 
 const validRestoredState: CheckoutState = {
@@ -80,6 +107,8 @@ const validRestoredState: CheckoutState = {
   contractsAccepted: false,
   paymentStatus: 'idle',
   paymentError: null,
+  transaction: null,
+  lastReadRequestId: null,
 }
 
 describe('checkout slice', () => {
@@ -94,10 +123,12 @@ describe('checkout slice', () => {
       'delivery',
       'idempotencyKey',
       'installments',
+      'lastReadRequestId',
       'paymentError',
       'paymentStatus',
       'quantity',
       'selectedProductId',
+      'transaction',
       'transactionId',
     ])
     expectNoCardLikeKeys(state)
@@ -218,6 +249,54 @@ describe('checkout slice', () => {
     const cleared = checkoutSlice.reducer(failed, paymentErrorCleared())
     expect(cleared.paymentError).toBeNull()
     expect(cleared.paymentStatus).toBe('idle')
+  })
+
+  it('maps every backend transaction status to a payment status', () => {
+    expect(paymentStatusFromTransaction('PENDING')).toBe('pending')
+    expect(paymentStatusFromTransaction('APPROVED')).toBe('approved')
+    expect(paymentStatusFromTransaction('DECLINED')).toBe('declined')
+    expect(paymentStatusFromTransaction('VOIDED')).toBe('voided')
+    expect(paymentStatusFromTransaction('ERROR')).toBe('error')
+  })
+
+  it('stores the latest request id when a read starts', () => {
+    const state = checkoutSlice.reducer(undefined, transactionReadStarted('req-1'))
+    expect(state.lastReadRequestId).toBe('req-1')
+  })
+
+  it('stores the transaction view and derives the payment status', () => {
+    const view = buildTransactionView({ status: 'APPROVED' })
+    const state = checkoutSlice.reducer(
+      checkoutSlice.reducer(
+        undefined,
+        paymentFailed(createApiError('network')),
+      ),
+      transactionReceived(view),
+    )
+
+    expect(state.transaction).toEqual(view)
+    expect(state.paymentStatus).toBe('approved')
+    expect(state.paymentError).toBeNull()
+  })
+
+  it('keeps the pending status on a transient read failure', () => {
+    const state = checkoutSlice.reducer(
+      checkoutSlice.reducer(undefined, paymentStatusChanged('pending')),
+      transactionReadFailed(createApiError('server')),
+    )
+
+    expect(state.paymentStatus).toBe('pending')
+    expect(state.paymentError?.kind).toBe('server')
+  })
+
+  it('flags a final error for a non-transient read failure', () => {
+    const state = checkoutSlice.reducer(
+      checkoutSlice.reducer(undefined, paymentStatusChanged('pending')),
+      transactionReadFailed(createApiError('notFound')),
+    )
+
+    expect(state.paymentStatus).toBe('error')
+    expect(state.paymentError?.kind).toBe('notFound')
   })
 
   it('clears everything on startOver', () => {

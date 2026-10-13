@@ -4,7 +4,10 @@ import type {
   PaymentStatus,
 } from '@/features/checkout/checkout.slice'
 import type { CheckoutConfigStatus } from '@/features/checkout/checkout-config.slice'
-import type { CheckoutConfig } from '@/features/checkout/checkout.types'
+import type {
+  CheckoutConfig,
+  TransactionView,
+} from '@/features/checkout/checkout.types'
 import type { ApiError } from '@/shared/api/api.errors'
 
 export const selectCheckoutStep = (state: RootState) =>
@@ -42,6 +45,10 @@ export const selectPaymentStatus = (state: RootState): PaymentStatus =>
 
 export const selectPaymentError = (state: RootState): ApiError | null =>
   state.checkout.paymentError
+
+export const selectTransaction = (
+  state: RootState,
+): TransactionView | null => state.checkout.transaction ?? null
 
 export const selectHasStartedPurchase = (state: RootState) =>
   state.checkout.selectedProductId !== null

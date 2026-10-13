@@ -90,8 +90,10 @@ export function toCheckoutState(doc: StorableCheckout): CheckoutState {
     cardLastFour: null,
     installments: INSTALLMENTS_DEFAULT,
     contractsAccepted: false,
-    paymentStatus: 'idle',
+    paymentStatus: doc.transactionId ? 'pending' : 'idle',
     paymentError: null,
+    transaction: null,
+    lastReadRequestId: null,
   }
 }
 

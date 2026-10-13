@@ -7,6 +7,7 @@ import {
   createTransaction,
   loadCheckoutConfig,
   payTransaction,
+  readTransactionStatus,
   restoreProgress,
 } from '@/features/checkout/checkout.thunks'
 import checkoutConfigReducer from '@/features/checkout/checkout-config.slice'
@@ -210,6 +211,26 @@ describe('restoreProgress thunk', () => {
     await store.dispatch(restoreProgress()).unwrap()
     expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
     expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+  })
+
+  it('re-reads a restored transaction instead of creating or paying again', async () => {
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(buildTransaction({ status: 'PENDING' }))
+    })
+    const store = makeStore({ ...fullyStartedCheckout(), currentStep: 'finalStatus' })
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('verifying')
+    expect(mockedHttpRequest).toHaveBeenCalledWith(
+      '/transactions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      { map400ToNotFound: true },
+    )
+    const paths = mockedHttpRequest.mock.calls.map(([path]) => path)
+    expect(paths.some((path) => path === '/transactions')).toBe(false)
+    expect(paths.some((path) => path.endsWith('/payment'))).toBe(false)
+    expect(store.getState().checkout.currentStep).toBe('finalStatus')
   })
 })
 
@@ -421,5 +442,94 @@ describe('payTransaction thunk', () => {
       expect((options as { body: { cardToken: string } }).body.cardToken).toBe('tok_single_use')
     }
     expect(mockedHttpRequest.mock.calls.some(([path]) => path === '/transactions')).toBe(false)
+  })
+})
+
+describe('readTransactionStatus thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  const pendingCheckout = (): CheckoutState => ({
+    ...startedCheckout(),
+    currentStep: 'finalStatus',
+    transactionId: 'tx-1',
+    idempotencyKey: 'key-1234567890abcdef',
+    paymentStatus: 'pending',
+  })
+
+  it('GETs the transaction and stores the view and its payment status', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction({ status: 'APPROVED' }))
+    const store = makeStore(pendingCheckout())
+
+    await store.dispatch(readTransactionStatus('tx-1')).unwrap()
+
+    expect(mockedHttpRequest).toHaveBeenCalledWith('/transactions/tx-1', {
+      map400ToNotFound: true,
+    })
+    expect(store.getState().checkout.transaction?.status).toBe('APPROVED')
+    expect(store.getState().checkout.paymentStatus).toBe('approved')
+    expect(store.getState().checkout.paymentError).toBeNull()
+  })
+
+  it('keeps the pending status while the provider has not settled', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction({ status: 'PENDING' }))
+    const store = makeStore(pendingCheckout())
+
+    await store.dispatch(readTransactionStatus('tx-1')).unwrap()
+
+    expect(store.getState().checkout.paymentStatus).toBe('pending')
+  })
+
+  it('rejects with notFound for an unknown transaction id and surfaces a final error', async () => {
+    mockedHttpRequest.mockResolvedValue(createApiError('notFound'))
+    const store = makeStore(pendingCheckout())
+
+    const error = await store
+      .dispatch(readTransactionStatus('missing'))
+      .unwrap()
+      .catch((e) => e)
+
+    expect(error.kind).toBe('notFound')
+    expect(store.getState().checkout.paymentStatus).toBe('error')
+    expect(store.getState().checkout.paymentError?.kind).toBe('notFound')
+  })
+
+  it('stays pending on a transient read failure so it can retry', async () => {
+    mockedHttpRequest.mockResolvedValue(createApiError('network'))
+    const store = makeStore(pendingCheckout())
+
+    await store.dispatch(readTransactionStatus('tx-1')).unwrap().catch(() => undefined)
+
+    expect(store.getState().checkout.paymentStatus).toBe('pending')
+    expect(store.getState().checkout.paymentError?.kind).toBe('network')
+  })
+
+  it('ignores an out-of-order response so only the latest read applies', async () => {
+    let resolveFirst: (value: unknown) => void = () => undefined
+    let resolveSecond: (value: unknown) => void = () => undefined
+    mockedHttpRequest
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+      )
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveSecond = resolve
+        }),
+      )
+    const store = makeStore(pendingCheckout())
+
+    const first = store.dispatch(readTransactionStatus('tx-1'))
+    const second = store.dispatch(readTransactionStatus('tx-1'))
+
+    resolveSecond(buildTransaction({ status: 'APPROVED' }))
+    await second
+    resolveFirst(buildTransaction({ status: 'PENDING' }))
+    await first
+
+    expect(store.getState().checkout.transaction?.status).toBe('APPROVED')
+    expect(store.getState().checkout.paymentStatus).toBe('approved')
   })
 })

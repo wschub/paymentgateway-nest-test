@@ -1,7 +1,8 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { INSTALLMENTS_DEFAULT, MAX_QUANTITY_PER_PURCHASE } from '@/shared/constants'
 import { clampQuantity } from '@/shared/product'
-import type { ApiError } from '@/shared/api/api.errors'
+import type { ApiError, ApiErrorKind } from '@/shared/api/api.errors'
+import type { TransactionStatus, TransactionView } from '@/features/checkout/checkout.types'
 
 export type CheckoutStep = 'product' | 'cardAndDelivery' | 'summary' | 'finalStatus'
 
@@ -38,7 +39,33 @@ export interface CheckoutState {
   contractsAccepted: boolean
   paymentStatus: PaymentStatus
   paymentError: ApiError | null
+  transaction?: TransactionView | null
+  lastReadRequestId?: string | null
 }
+
+export const paymentStatusFromTransaction = (
+  status: TransactionStatus,
+): PaymentStatus => {
+  switch (status) {
+    case 'APPROVED':
+      return 'approved'
+    case 'DECLINED':
+      return 'declined'
+    case 'VOIDED':
+      return 'voided'
+    case 'ERROR':
+      return 'error'
+    case 'PENDING':
+    default:
+      return 'pending'
+  }
+}
+
+const TRANSIENT_READ_KINDS: readonly ApiErrorKind[] = [
+  'network',
+  'rateLimited',
+  'server',
+]
 
 export interface PurchaseStartedPayload {
   productId: string
@@ -72,6 +99,8 @@ const initialState: CheckoutState = {
   contractsAccepted: false,
   paymentStatus: 'idle',
   paymentError: null,
+  transaction: null,
+  lastReadRequestId: null,
 }
 
 const clampInstallments = (value: number): number => {
@@ -135,6 +164,20 @@ export const checkoutSlice = createSlice({
         state.paymentStatus = 'idle'
       }
     },
+    transactionReadStarted(state, action: PayloadAction<string>) {
+      state.lastReadRequestId = action.payload
+    },
+    transactionReceived(state, action: PayloadAction<TransactionView>) {
+      state.transaction = action.payload
+      state.paymentStatus = paymentStatusFromTransaction(action.payload.status)
+      state.paymentError = null
+    },
+    transactionReadFailed(state, action: PayloadAction<ApiError>) {
+      state.paymentError = action.payload
+      if (!TRANSIENT_READ_KINDS.includes(action.payload.kind)) {
+        state.paymentStatus = 'error'
+      }
+    },
     startOver: () => initialState,
     purchaseCompleted: () => initialState,
     restored(state, action: PayloadAction<RestoredPayload>) {
@@ -150,6 +193,8 @@ export const checkoutSlice = createSlice({
       state.contractsAccepted = false
       state.paymentStatus = 'idle'
       state.paymentError = null
+      state.transaction = null
+      state.lastReadRequestId = null
     },
   },
 })
@@ -166,6 +211,9 @@ export const {
   paymentStatusChanged,
   paymentFailed,
   paymentErrorCleared,
+  transactionReadStarted,
+  transactionReceived,
+  transactionReadFailed,
   startOver,
   purchaseCompleted,
   restored,
