@@ -62,6 +62,7 @@ export const checkoutSlice = createSlice({
       )
     },
     startOver: () => initialState,
+    purchaseCompleted: () => initialState,
     restored(state, action: PayloadAction<RestoredPayload>) {
       state.currentStep = action.payload.currentStep
       state.selectedProductId = action.payload.selectedProductId
@@ -72,7 +73,7 @@ export const checkoutSlice = createSlice({
   },
 })
 
-export const { purchaseStarted, quantityChanged, startOver, restored } =
+export const { purchaseStarted, quantityChanged, startOver, purchaseCompleted, restored } =
   checkoutSlice.actions
 
 export default checkoutSlice.reducer
