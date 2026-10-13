@@ -21,6 +21,7 @@ import {
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
+  retryPurchase,
 } from '@/features/checkout/checkout.thunks'
 import {
   CardAndDeliveryForm,
@@ -164,6 +165,12 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
     }
   }
 
+  const retryPayment = () => {
+    setPayError(null)
+    setCardToken(null)
+    void dispatch(retryPurchase())
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
     if (event.key !== 'Tab') return
     const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE)
@@ -195,6 +202,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
           status={paymentStatus}
           error={payError ?? paymentError}
           onRecheck={recheckPayment}
+          onRetry={retryPayment}
         />
       )
     }

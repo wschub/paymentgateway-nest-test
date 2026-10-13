@@ -180,6 +180,17 @@ export const checkoutSlice = createSlice({
     },
     startOver: () => initialState,
     purchaseCompleted: () => initialState,
+    retryAfterFinal(state) {
+      state.currentStep = 'cardAndDelivery'
+      state.transactionId = null
+      state.transaction = null
+      state.lastReadRequestId = null
+      state.paymentStatus = 'idle'
+      state.paymentError = null
+      state.cardBrand = null
+      state.cardLastFour = null
+      state.installments = INSTALLMENTS_DEFAULT
+    },
     restored(state, action: PayloadAction<RestoredPayload>) {
       state.currentStep = action.payload.currentStep
       state.selectedProductId = action.payload.selectedProductId
@@ -216,6 +227,7 @@ export const {
   transactionReadFailed,
   startOver,
   purchaseCompleted,
+  retryAfterFinal,
   restored,
 } = checkoutSlice.actions
 

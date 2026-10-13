@@ -9,6 +9,7 @@ import {
   payTransaction,
   readTransactionStatus,
   restoreProgress,
+  retryPurchase,
 } from '@/features/checkout/checkout.thunks'
 import checkoutConfigReducer from '@/features/checkout/checkout-config.slice'
 import type {
@@ -22,6 +23,7 @@ import {
 } from '@/features/checkout/persistence'
 import { httpRequest } from '@/shared/api/http'
 import { createApiError } from '@/shared/api/api.errors'
+import { IDEMPOTENCY_KEY_PATTERN } from '@/shared/constants'
 import type { Product } from '@/shared/product'
 
 jest.mock('@/shared/api/http', () => ({
@@ -531,5 +533,33 @@ describe('readTransactionStatus thunk', () => {
 
     expect(store.getState().checkout.transaction?.status).toBe('APPROVED')
     expect(store.getState().checkout.paymentStatus).toBe('approved')
+  })
+})
+
+describe('retryPurchase thunk', () => {
+  it('clears the final transaction and issues a new key before retrying', async () => {
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+      transactionId: 'tx-final',
+      transaction: buildTransaction({ status: 'DECLINED' }),
+      paymentStatus: 'declined',
+      paymentError: createApiError('badRequest'),
+    })
+    const previousKey = store.getState().checkout.idempotencyKey
+
+    await store.dispatch(retryPurchase())
+
+    const state = store.getState().checkout
+    expect(state.currentStep).toBe('cardAndDelivery')
+    expect(state.transactionId).toBeNull()
+    expect(state.transaction).toBeNull()
+    expect(state.paymentStatus).toBe('idle')
+    expect(state.paymentError).toBeNull()
+    expect(state.idempotencyKey).not.toBe(previousKey)
+    expect(state.idempotencyKey).toMatch(IDEMPOTENCY_KEY_PATTERN)
+    expect(state.selectedProductId).toBe(PRODUCT_ID)
+    expect(state.quantity).toBe(3)
+    expect(state.delivery).toEqual(DELIVERY_RESTORED)
   })
 })

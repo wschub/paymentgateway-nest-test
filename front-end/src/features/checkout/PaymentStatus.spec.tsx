@@ -33,16 +33,18 @@ const renderStatus = (
   props: Partial<React.ComponentProps<typeof PaymentStatus>> = {},
 ) => {
   const onRecheck = jest.fn()
+  const onRetry = jest.fn()
   render(
     <PaymentStatus
       transaction={null}
       status="pending"
       error={null}
       onRecheck={onRecheck}
+      onRetry={onRetry}
       {...props}
     />,
   )
-  return { onRecheck }
+  return { onRecheck, onRetry }
 }
 
 describe('PaymentStatus', () => {
@@ -79,18 +81,23 @@ describe('PaymentStatus', () => {
     expect(screen.getByText(/Calle 10 #23/)).toBeInTheDocument()
   })
 
-  it('renders the declined result without re-checking a final state', () => {
-    renderStatus({
+  it('renders the declined result and lets the shopper retry', async () => {
+    const user = userEvent.setup()
+    const { onRetry } = renderStatus({
       transaction: buildTransaction({ status: 'DECLINED' }),
       status: 'declined',
     })
 
     expect(screen.getByRole('heading', { name: 'Pago rechazado' })).toBeInTheDocument()
     expect(screen.getByText(/otra tarjeta/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
-  it('renders a voided transaction with the expiration reason', () => {
-    renderStatus({
+  it('renders a voided transaction with the expiration reason and a retry', async () => {
+    const user = userEvent.setup()
+    const { onRetry } = renderStatus({
       transaction: buildTransaction({
         status: 'VOIDED',
         failureReason: 'RESERVATION_EXPIRED',
@@ -100,10 +107,14 @@ describe('PaymentStatus', () => {
 
     expect(screen.getByRole('heading', { name: 'Compra anulada' })).toBeInTheDocument()
     expect(screen.getByText(/reserva expiró/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
-  it('renders the error result with the safe message', () => {
-    renderStatus({
+  it('renders the error result with the safe message and a retry', async () => {
+    const user = userEvent.setup()
+    const { onRetry } = renderStatus({
       status: 'error',
       error: createApiError('network'),
     })
@@ -112,6 +123,9 @@ describe('PaymentStatus', () => {
       screen.getByRole('heading', { name: 'No pudimos confirmar el pago' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(/conectar/i)
+
+    await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
   it.each<TransactionStatus>(['APPROVED', 'DECLINED', 'VOIDED', 'ERROR'])(

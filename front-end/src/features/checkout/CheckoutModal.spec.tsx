@@ -463,4 +463,33 @@ describe('CheckoutModal', () => {
     ).toBeInTheDocument()
     expect(screen.getByTestId('form-idempotency-key')).toHaveTextContent('key-123')
   })
+
+  it('clears the transaction and issues a new key when retrying after a decline', async () => {
+    const user = userEvent.setup()
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      return Promise.resolve({ ...paidTransaction, status: 'DECLINED' })
+    })
+    const { store } = renderModal({
+      currentStep: 'finalStatus',
+      transactionId: TRANSACTION_ID,
+      paymentStatus: 'declined',
+    })
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Intentar de nuevo' }),
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'Continuar (simulado)' }),
+    ).toBeInTheDocument()
+    const state = store.getState().checkout
+    expect(state.currentStep).toBe('cardAndDelivery')
+    expect(state.transactionId).toBeNull()
+    expect(state.paymentStatus).toBe('idle')
+    expect(state.idempotencyKey).not.toBe('key-123')
+    expect(screen.getByTestId('form-idempotency-key')).toHaveTextContent(
+      state.idempotencyKey ?? '',
+    )
+  })
 })

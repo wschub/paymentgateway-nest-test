@@ -1,6 +1,8 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import {
   checkoutStepChanged,
+  idempotencyKeySet,
+  retryAfterFinal,
   startOver,
   transactionReadFailed,
   transactionReadStarted,
@@ -13,6 +15,7 @@ import {
   quantityChanged as productQuantityChanged,
 } from '@/features/product/product.slice'
 import { toTransactionPayload } from '@/features/checkout/delivery.validation'
+import { generateIdempotencyKey } from '@/features/checkout/idempotency'
 import type { CheckoutConfig, TransactionView } from '@/features/checkout/checkout.types'
 import { httpRequest, isApiError } from '@/shared/api/http'
 import type { ApiError } from '@/shared/api/api.errors'
@@ -57,6 +60,15 @@ export const restoreProgress = createAsyncThunk<
   }
 
   return 'transient'
+})
+
+export const retryPurchase = createAsyncThunk<
+  void,
+  void,
+  { state: RestoreProgressState }
+>('checkout/retryPurchase', async (_arg, { dispatch }) => {
+  dispatch(idempotencyKeySet(generateIdempotencyKey()))
+  dispatch(retryAfterFinal())
 })
 
 export const loadCheckoutConfig = createAsyncThunk<

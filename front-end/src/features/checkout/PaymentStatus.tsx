@@ -10,6 +10,7 @@ export interface PaymentStatusProps {
   status: PaymentStatusValue
   error: ApiError | null
   onRecheck: () => void
+  onRetry: () => void
 }
 
 export function PaymentStatus({
@@ -17,6 +18,7 @@ export function PaymentStatus({
   status,
   error,
   onRecheck,
+  onRetry,
 }: PaymentStatusProps) {
   const recheckButton = (
     <button
@@ -25,6 +27,16 @@ export function PaymentStatus({
       className="w-fit rounded-md border border-gray-400 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
     >
       Volver a verificar
+    </button>
+  )
+
+  const retryButton = (
+    <button
+      type="button"
+      onClick={onRetry}
+      className="w-fit rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+    >
+      Intentar de nuevo
     </button>
   )
 
@@ -44,7 +56,7 @@ export function PaymentStatus({
           {error?.message ??
             'Ocurrió un error inesperado. Inténtalo de nuevo en unos momentos.'}
         </p>
-        {recheckButton}
+        {retryButton}
       </>,
     )
   }
@@ -83,7 +95,7 @@ export function PaymentStatus({
         {transaction ? (
           <p className="text-sm text-gray-600">Referencia: {transaction.reference}</p>
         ) : null}
-        {recheckButton}
+        {retryButton}
       </>,
     )
   }
@@ -98,6 +110,7 @@ export function PaymentStatus({
             ? 'La reserva expiró antes de confirmar el pago. Inicia una compra nueva.'
             : 'Esta compra ya no puede completarse. Inicia una compra nueva.'}
         </p>
+        {retryButton}
       </>,
     )
   }

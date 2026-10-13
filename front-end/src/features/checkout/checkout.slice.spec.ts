@@ -1,6 +1,7 @@
 import checkoutReducer, {
   cardDisplaySet,
   checkoutSlice,
+  checkoutStepChanged,
   contractsAcceptanceChanged,
   idempotencyKeySet,
   installmentsChanged,
@@ -12,6 +13,7 @@ import checkoutReducer, {
   purchaseStarted,
   quantityChanged,
   restored,
+  retryAfterFinal,
   startOver,
   transactionReadFailed,
   transactionReadStarted,
@@ -332,6 +334,45 @@ describe('checkout slice', () => {
       purchaseCompleted(),
     )
     expect(completed).toEqual(cleanState)
+  })
+
+  it('clears the final transaction but keeps the purchase on retryAfterFinal', () => {
+    let state = checkoutSlice.reducer(
+      undefined,
+      purchaseStarted({ productId: 'p-1', quantity: 4 }),
+    )
+    state = checkoutSlice.reducer(state, idempotencyKeySet('Abcdefghijklmnop1234'))
+    state = checkoutSlice.reducer(
+      state,
+      cardDisplaySet({ brand: 'VISA', lastFour: '4242' }),
+    )
+    state = checkoutSlice.reducer(state, installmentsChanged(3))
+    state = checkoutSlice.reducer(
+      state,
+      checkoutStepChanged('finalStatus'),
+    )
+    state = checkoutSlice.reducer(
+      state,
+      transactionReadStarted('req-1'),
+    )
+    state = checkoutSlice.reducer(
+      state,
+      transactionReceived(buildTransactionView({ status: 'DECLINED' })),
+    )
+
+    const retried = checkoutSlice.reducer(state, retryAfterFinal())
+
+    expect(retried.currentStep).toBe('cardAndDelivery')
+    expect(retried.transactionId).toBeNull()
+    expect(retried.transaction).toBeNull()
+    expect(retried.lastReadRequestId).toBeNull()
+    expect(retried.paymentStatus).toBe('idle')
+    expect(retried.paymentError).toBeNull()
+    expect(retried.cardBrand).toBeNull()
+    expect(retried.cardLastFour).toBeNull()
+    expect(retried.installments).toBe(INSTALLMENTS_DEFAULT)
+    expect(retried.selectedProductId).toBe('p-1')
+    expect(retried.quantity).toBe(4)
   })
 
   it('restores a persisted selection via restored', () => {
