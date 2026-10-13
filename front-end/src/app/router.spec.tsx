@@ -138,6 +138,13 @@ describe('AppRoutes', () => {
         quantity: 3,
         delivery: null,
         transactionId: null,
+        idempotencyKey: null,
+        cardBrand: null,
+        cardLastFour: null,
+        installments: 1,
+        contractsAccepted: false,
+        paymentStatus: 'idle',
+        paymentError: null,
       },
     })
 

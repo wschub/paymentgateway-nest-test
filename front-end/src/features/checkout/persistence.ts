@@ -1,4 +1,8 @@
-import { MAX_QUANTITY_PER_PURCHASE } from '@/shared/constants'
+import {
+  IDEMPOTENCY_KEY_PATTERN,
+  INSTALLMENTS_DEFAULT,
+  MAX_QUANTITY_PER_PURCHASE,
+} from '@/shared/constants'
 import type {
   CheckoutState,
   CheckoutStep,
@@ -6,7 +10,7 @@ import type {
 } from '@/features/checkout/checkout.slice'
 
 export const PERSISTENCE_STORAGE_KEY = 'checkout-progress'
-export const PERSISTENCE_VERSION = 1
+export const PERSISTENCE_VERSION = 2
 export const PERSISTENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
 export interface StorableCheckout {
@@ -16,6 +20,7 @@ export interface StorableCheckout {
   quantity: number
   delivery: DeliveryData | null
   transactionId: string | null
+  idempotencyKey: string | null
 }
 
 export interface PersistedProgress extends StorableCheckout {
@@ -62,6 +67,7 @@ export function toStorableCheckout(state: CheckoutState): StorableCheckout {
     quantity: state.quantity,
     delivery: state.delivery,
     transactionId: state.transactionId,
+    idempotencyKey: state.idempotencyKey,
   }
 }
 
@@ -79,6 +85,15 @@ export function toCheckoutState(doc: StorableCheckout): CheckoutState {
     quantity: doc.quantity,
     delivery: doc.delivery,
     transactionId: doc.transactionId,
+    idempotencyKey: doc.idempotencyKey,
+    cardBrand: null,
+    cardLastFour: null,
+    installments: INSTALLMENTS_DEFAULT,
+    contractsAccepted: false,
+    paymentStatus: doc.transactionId ? 'pending' : 'idle',
+    paymentError: null,
+    transaction: null,
+    lastReadRequestId: null,
   }
 }
 
@@ -109,7 +124,8 @@ export function shallowStorableEqual(
     a.selectedProductId === b.selectedProductId &&
     a.quantity === b.quantity &&
     a.delivery === b.delivery &&
-    a.transactionId === b.transactionId
+    a.transactionId === b.transactionId &&
+    a.idempotencyKey === b.idempotencyKey
   )
 }
 
@@ -152,6 +168,10 @@ function normalizeDelivery(value: DeliveryData | null): DeliveryData | null {
     return { ...rest, notes }
   }
   return rest
+}
+
+function isValidIdempotencyKey(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && IDEMPOTENCY_KEY_PATTERN.test(value))
 }
 
 export function loadPersistedProgress(
@@ -238,6 +258,12 @@ export function loadPersistedProgress(
     return null
   }
 
+  const idempotencyKey = record.idempotencyKey
+  if (!isValidIdempotencyKey(idempotencyKey)) {
+    discard()
+    return null
+  }
+
   return {
     version: PERSISTENCE_VERSION,
     currentStep: currentStep as CheckoutStep,
@@ -245,6 +271,7 @@ export function loadPersistedProgress(
     quantity: quantity as number,
     delivery: normalizeDelivery(record.delivery as DeliveryData | null),
     transactionId: transactionId as string | null,
+    idempotencyKey,
   }
 }
 

@@ -6,6 +6,9 @@ import productReducer, {
 import checkoutReducer, {
   type CheckoutState,
 } from '@/features/checkout/checkout.slice'
+import checkoutConfigReducer, {
+  type CheckoutConfigState,
+} from '@/features/checkout/checkout-config.slice'
 import {
   loadPersistedProgress,
   subscribeCheckoutProgress,
@@ -18,12 +21,14 @@ export type RootState = {
   catalog: CatalogState
   product: ProductDetailState
   checkout: CheckoutState
+  checkoutConfig: CheckoutConfigState
 }
 
 const rootReducer = combineReducers({
   catalog: catalogReducer,
   product: productReducer,
   checkout: checkoutReducer,
+  checkoutConfig: checkoutConfigReducer,
 })
 
 export const makeStore = (preloadedState?: Partial<RootState>) =>

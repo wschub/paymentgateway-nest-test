@@ -4,7 +4,20 @@ import {
   type ApiErrorKind,
 } from '@/shared/api/api.errors'
 
-const KINDS: ApiErrorKind[] = ['network', 'rateLimited', 'server', 'notFound']
+const KINDS: ApiErrorKind[] = [
+  'network',
+  'rateLimited',
+  'server',
+  'notFound',
+  'soldOut',
+  'idempotencyConflict',
+  'notPayable',
+  'contractsNotAccepted',
+  'invalidToken',
+  'providerRejected',
+  'providerUnavailable',
+  'badRequest',
+]
 
 describe('api.errors', () => {
   it.each(KINDS)('creates a plain object error for kind "%s"', (kind) => {

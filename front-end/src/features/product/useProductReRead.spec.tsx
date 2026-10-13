@@ -46,7 +46,7 @@ function Host({ id }: { id: string }) {
   return (
     <>
       <p data-testid="notice">{notice ?? ''}</p>
-      <button type="button" onClick={requestPurchase}>
+      <button type="button" onClick={() => requestPurchase()}>
         Comprar
       </button>
       <button type="button" onClick={retry}>

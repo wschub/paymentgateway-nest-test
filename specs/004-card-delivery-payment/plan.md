@@ -36,9 +36,10 @@ description and updates the persistence contract.
 call is plain `fetch` from one allow-listed seam. No UI component library, no `redux-persist`.
 
 **Storage**: Browser `localStorage`, single versioned document under `checkout-progress`, now **version 2**
-(adds `idempotencyKey`). The single-use card token lives only in non-persisted Redux memory (`cardToken`)
-between Continuar and Pagar; the card form state (number/expiry/CVC/cardholder) is component-local React state
-only and is never written to Redux or `localStorage`. No server-side storage change.
+(adds `idempotencyKey`). The single-use card token lives only in local `CheckoutModal` component state (memory
+only, never dispatched to Redux) between Continuar and Pagar and is passed as an argument to `payTransaction`;
+the card form state (number/expiry/CVC/cardholder) is component-local React state only and is never written to
+Redux or `localStorage`. No server-side storage change.
 
 **Testing**: Jest + `ts-jest` + `jest-environment-jsdom` + Testing Library, global 80 % coverage threshold
 (excludes `src/main.tsx`, `src/config.ts`). New suites: http wrapper POST/headers/error mapping, card
@@ -70,8 +71,8 @@ shift at 375 px.
 - Idempotency key: 16–64 chars of `[A-Za-z0-9_-]`, generated once when the modal opens, persisted, and reused
   only while the purchase is pending; cleared with the transaction id and regenerated after a final
   declined/voided/error. Required only when the step is past `product` or a transaction id exists.
-- The single-use card token is held only in non-persisted memory (`cardToken`) and is never writable to the
-  persisted document.
+- The single-use card token is held only in local `CheckoutModal` component state (memory only, never in Redux)
+  and is never writable to the persisted document.
 
 **Scale/Scope**: One modal flow with steps `cardAndDelivery → summary → finalStatus`; one new API seam; four
 new thunks (checkout config, create transaction, pay transaction, read status) and one polling helper; two new

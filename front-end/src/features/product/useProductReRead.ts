@@ -9,7 +9,7 @@ import { clampQuantity, isPurchasable } from '@/shared/product'
 
 export interface ProductReRead {
   notice: string | null
-  requestPurchase: () => void
+  requestPurchase: (onStarted?: (quantity: number) => void) => void
   retry: () => void
 }
 
@@ -79,7 +79,7 @@ export function useProductReRead(id: string): ProductReRead {
     }
   }, [dispatch, id, isResumed])
 
-  const requestPurchase = useCallback(() => {
+  const requestPurchase = useCallback((onStarted?: (quantity: number) => void) => {
     const before = quantityRef.current
     void dispatch(fetchProduct(id)).then((result) => {
       if (!fetchProduct.fulfilled.match(result)) {
@@ -95,6 +95,7 @@ export function useProductReRead(id: string): ProductReRead {
         setNotice(stockAdjustedMessage(fresh.stock, adjusted))
       }
       dispatch(purchaseStarted({ productId: id, quantity: adjusted }))
+      onStarted?.(adjusted)
     })
   }, [dispatch, id])
 
