@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import {
@@ -11,10 +11,17 @@ import { quantityChanged } from '@/features/product/product.slice'
 import { useProductReRead } from '@/features/product/useProductReRead'
 import { QuantitySelector } from '@/features/product/QuantitySelector'
 import {
+  selectIdempotencyKey,
   selectPurchaseQuantity,
   selectSelectedProductId,
 } from '@/features/checkout/checkout.selectors'
-import { startOver } from '@/features/checkout/checkout.slice'
+import {
+  checkoutStepChanged,
+  idempotencyKeySet,
+  startOver,
+} from '@/features/checkout/checkout.slice'
+import { generateIdempotencyKey } from '@/features/checkout/idempotency'
+import { CheckoutModal } from '@/features/checkout/CheckoutModal'
 import { Image } from '@/shared/ui/Image'
 import { Spinner } from '@/shared/ui/Spinner'
 import { ErrorState } from '@/shared/ui/ErrorState'
@@ -38,6 +45,9 @@ export function ProductPage() {
 
   const selectedProductId = useAppSelector(selectSelectedProductId)
   const checkoutQuantity = useAppSelector(selectPurchaseQuantity)
+  const idempotencyKey = useAppSelector(selectIdempotencyKey)
+
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
 
   const { notice, requestPurchase, retry } = useProductReRead(id)
 
@@ -45,6 +55,16 @@ export function ProductPage() {
   const loadedProduct = status === 'success' ? product : null
   const purchasable = loadedProduct ? isPurchasable(loadedProduct.stock) : false
   const notFound = status === 'error' && error?.kind === 'notFound'
+
+  const startPurchase = () => {
+    requestPurchase(() => {
+      if (!idempotencyKey) {
+        dispatch(idempotencyKeySet(generateIdempotencyKey()))
+      }
+      dispatch(checkoutStepChanged('cardAndDelivery'))
+      setCheckoutOpen(true)
+    })
+  }
 
   useEffect(() => {
     document.title = loadedProduct
@@ -111,7 +131,7 @@ export function ProductPage() {
                 />
                 <button
                   type="button"
-                  onClick={requestPurchase}
+                  onClick={startPurchase}
                   className="w-fit rounded-md bg-gray-800 px-5 py-2 font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
                 >
                   Iniciar compra
@@ -138,21 +158,33 @@ export function ProductPage() {
                 <p className="text-sm text-gray-600">
                   Cantidad seleccionada: {checkoutQuantity}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    dispatch(startOver())
-                    navigate('/')
-                  }}
-                  className="w-fit rounded-md border border-gray-400 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
-                >
-                  Comenzar de nuevo
-                </button>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutOpen(true)}
+                    className="w-fit rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+                  >
+                    Continuar compra
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dispatch(startOver())
+                      setCheckoutOpen(false)
+                      navigate('/')
+                    }}
+                    className="w-fit rounded-md border border-gray-400 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+                  >
+                    Comenzar de nuevo
+                  </button>
+                </div>
               </section>
             ) : null}
           </div>
         </div>
       ) : null}
+
+      <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
     </div>
   )
 }

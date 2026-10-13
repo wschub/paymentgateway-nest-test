@@ -100,6 +100,12 @@ export const checkoutSlice = createSlice({
         MAX_QUANTITY_PER_PURCHASE,
       )
     },
+    deliveryChanged(state, action: PayloadAction<DeliveryData>) {
+      state.delivery = action.payload
+    },
+    checkoutStepChanged(state, action: PayloadAction<CheckoutStep>) {
+      state.currentStep = action.payload
+    },
     idempotencyKeySet(state, action: PayloadAction<string | null>) {
       state.idempotencyKey = action.payload
     },
@@ -151,6 +157,8 @@ export const checkoutSlice = createSlice({
 export const {
   purchaseStarted,
   quantityChanged,
+  deliveryChanged,
+  checkoutStepChanged,
   idempotencyKeySet,
   cardDisplaySet,
   installmentsChanged,
