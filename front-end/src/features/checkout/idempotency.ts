@@ -10,7 +10,7 @@ const MISSING_CRYPTO_MESSAGE =
 const PATTERN_MISMATCH_MESSAGE =
   'La clave de idempotencia generada no cumple el formato requerido.'
 
-function base64UrlEncode(bytes: Uint8Array): string {
+export function base64UrlEncode(bytes: Uint8Array): string {
   let output = ''
   for (let index = 0; index < bytes.length; index += 3) {
     const byte0 = bytes[index]
@@ -35,6 +35,13 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return output
 }
 
+export function assertValidKey(key: string): string {
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    throw new Error(PATTERN_MISMATCH_MESSAGE)
+  }
+  return key
+}
+
 function randomKey(): string {
   const cryptoObject = globalThis.crypto
   if (!cryptoObject || typeof cryptoObject.getRandomValues !== 'function') {
@@ -44,11 +51,7 @@ function randomKey(): string {
   const bytes = new Uint8Array(KEY_BYTE_LENGTH)
   cryptoObject.getRandomValues(bytes)
 
-  const key = base64UrlEncode(bytes)
-  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
-    throw new Error(PATTERN_MISMATCH_MESSAGE)
-  }
-  return key
+  return assertValidKey(base64UrlEncode(bytes))
 }
 
 export function generateIdempotencyKey(): string {

@@ -1,4 +1,8 @@
-import { generateIdempotencyKey } from '@/features/checkout/idempotency'
+import {
+  assertValidKey,
+  base64UrlEncode,
+  generateIdempotencyKey,
+} from '@/features/checkout/idempotency'
 import { IDEMPOTENCY_KEY_PATTERN } from '@/shared/constants'
 
 const realCrypto = globalThis.crypto
@@ -91,5 +95,39 @@ describe('generateIdempotencyKey', () => {
     installCrypto({ randomUUID: undefined })
 
     expect(() => generateIdempotencyKey()).toThrow(/getRandomValues/i)
+  })
+})
+
+describe('base64UrlEncode', () => {
+  it('encodes a full 3-byte group into four url-safe characters', () => {
+    expect(base64UrlEncode(new Uint8Array([0x66, 0x6f, 0x6f]))).toBe('Zm9v')
+    expect(base64UrlEncode(new Uint8Array([0x00, 0x00, 0x00]))).toBe('AAAA')
+  })
+
+  it('encodes a two-byte tail without padding', () => {
+    expect(base64UrlEncode(new Uint8Array([0x66, 0x6f]))).toBe('Zm8')
+  })
+
+  it('encodes a single-byte tail without padding', () => {
+    expect(base64UrlEncode(new Uint8Array([0x66]))).toBe('Zg')
+  })
+
+  it('produces only url-safe characters for arbitrary bytes', () => {
+    const bytes = new Uint8Array(18)
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = (index * 37 + 200) % 256
+    }
+
+    expect(base64UrlEncode(bytes)).toMatch(IDEMPOTENCY_KEY_PATTERN)
+  })
+})
+
+describe('assertValidKey', () => {
+  it('returns the key when it matches the pattern', () => {
+    expect(assertValidKey('abcdefghijklmnop')).toBe('abcdefghijklmnop')
+  })
+
+  it('throws when the key does not match the pattern', () => {
+    expect(() => assertValidKey('too-short')).toThrow(/formato requerido/i)
   })
 })
