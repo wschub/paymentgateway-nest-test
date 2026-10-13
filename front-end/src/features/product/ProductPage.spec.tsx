@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -94,12 +94,84 @@ describe('ProductPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Iniciar compra' }))
 
+    expect(
+      await screen.findByRole('heading', { name: 'Siguiente paso' }),
+    ).toBeInTheDocument()
     expect(store.getState().checkout.selectedProductId).toBe(productA.id)
     expect(store.getState().checkout.quantity).toBe(2)
-    expect(
-      screen.getByRole('heading', { name: 'Siguiente paso' }),
-    ).toBeInTheDocument()
     expect(screen.getByText(/Cantidad seleccionada: 2/)).toBeInTheDocument()
+  })
+
+  it('re-reads stock before recording the purchase and clamps the quantity with a live notice', async () => {
+    const user = userEvent.setup()
+    mockedHttpRequest.mockResolvedValueOnce(productA)
+    const store = renderProductPage({ id: productA.id })
+
+    await screen.findByRole('button', { name: 'Iniciar compra' })
+    await user.click(screen.getByRole('button', { name: 'Aumentar cantidad' }))
+    await user.click(screen.getByRole('button', { name: 'Aumentar cantidad' }))
+    expect(screen.getByRole('spinbutton', { name: 'Cantidad' })).toHaveValue(3)
+
+    mockedHttpRequest.mockResolvedValueOnce({ ...productA, stock: 2 })
+    await user.click(screen.getByRole('button', { name: 'Iniciar compra' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Siguiente paso' }),
+    ).toBeInTheDocument()
+    expect(store.getState().checkout.quantity).toBe(2)
+    expect(screen.getByText(/cantidad se ajustó a 2/i)).toBeInTheDocument()
+  })
+
+  it('blocks the purchase when the pre-purchase re-read shows the product sold out', async () => {
+    const user = userEvent.setup()
+    mockedHttpRequest.mockResolvedValueOnce(productA)
+    const store = renderProductPage({ id: productA.id })
+
+    await screen.findByRole('button', { name: 'Iniciar compra' })
+    mockedHttpRequest.mockResolvedValueOnce({ ...productA, stock: 0 })
+    await user.click(screen.getByRole('button', { name: 'Iniciar compra' }))
+
+    expect(await screen.findByText(/se agotó/i)).toBeInTheDocument()
+    expect(store.getState().checkout.selectedProductId).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Iniciar compra' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('re-reads the product when the tab becomes visible again', async () => {
+    mockedHttpRequest.mockResolvedValue(productA)
+    renderProductPage({ id: productA.id })
+    await screen.findByRole('heading', { name: 'Mouse', level: 1 })
+
+    mockedHttpRequest.mockClear()
+    mockedHttpRequest.mockResolvedValue({ ...productA, stock: 7 })
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    await waitFor(() =>
+      expect(mockedHttpRequest).toHaveBeenCalledWith(
+        `/products/${productA.id}`,
+        { map400ToNotFound: true },
+      ),
+    )
+    expect(screen.getByText('7 unidades disponibles')).toBeInTheDocument()
+  })
+
+  it('exposes a focusable heading, a labelled quantity control and image alt text', async () => {
+    mockedHttpRequest.mockResolvedValue(productA)
+    renderProductPage({ id: productA.id })
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Mouse',
+      level: 1,
+    })
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('img', { name: 'Mouse' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Cantidad' }),
+    ).toBeInTheDocument()
   })
 
   it('blocks the purchase when the product is out of stock', async () => {
@@ -212,6 +284,7 @@ describe('ProductPage', () => {
     expect(store.getState().checkout.selectedProductId).toBe(productA.id)
 
     await user.click(screen.getByRole('button', { name: 'Iniciar compra' }))
+    await screen.findByRole('heading', { name: 'Siguiente paso' })
     expect(store.getState().checkout.selectedProductId).toBe(productB.id)
   })
 

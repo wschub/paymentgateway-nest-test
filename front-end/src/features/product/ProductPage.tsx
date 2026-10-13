@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import {
@@ -7,24 +7,18 @@ import {
   selectProductQuantity,
   selectProductStatus,
 } from '@/features/product/product.selectors'
-import {
-  fetchProduct,
-  productOpened,
-  quantityChanged,
-} from '@/features/product/product.slice'
+import { quantityChanged } from '@/features/product/product.slice'
+import { useProductReRead } from '@/features/product/useProductReRead'
 import { QuantitySelector } from '@/features/product/QuantitySelector'
 import {
   selectPurchaseQuantity,
   selectSelectedProductId,
 } from '@/features/checkout/checkout.selectors'
-import {
-  purchaseStarted,
-  startOver,
-} from '@/features/checkout/checkout.slice'
-import { restoreProgress } from '@/features/checkout/checkout.thunks'
+import { startOver } from '@/features/checkout/checkout.slice'
 import { Image } from '@/shared/ui/Image'
 import { Spinner } from '@/shared/ui/Spinner'
 import { ErrorState } from '@/shared/ui/ErrorState'
+import { LiveRegion } from '@/shared/ui/LiveRegion'
 import { formatPriceCOP } from '@/shared/format/money'
 import { isPurchasable } from '@/shared/product'
 import { STORE_NAME } from '@/shared/constants'
@@ -45,21 +39,7 @@ export function ProductPage() {
   const selectedProductId = useAppSelector(selectSelectedProductId)
   const checkoutQuantity = useAppSelector(selectPurchaseQuantity)
 
-  const selectedIdRef = useRef(selectedProductId)
-  useEffect(() => {
-    selectedIdRef.current = selectedProductId
-  }, [selectedProductId])
-
-  useEffect(() => {
-    const resumed =
-      selectedIdRef.current !== null && selectedIdRef.current === id
-    if (resumed) {
-      void dispatch(restoreProgress())
-    } else {
-      dispatch(productOpened())
-      void dispatch(fetchProduct(id))
-    }
-  }, [id, dispatch])
+  const { notice, requestPurchase, retry } = useProductReRead(id)
 
   const resumed = selectedProductId !== null && selectedProductId === id
   const loadedProduct = status === 'success' ? product : null
@@ -72,19 +52,13 @@ export function ProductPage() {
       : `Producto — ${STORE_NAME}`
   }, [loadedProduct])
 
-  const retry = () => {
-    if (resumed) {
-      void dispatch(restoreProgress())
-    } else {
-      void dispatch(fetchProduct(id))
-    }
-  }
-
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6">
       <h1 tabIndex={-1} className="text-2xl font-bold text-gray-900">
         {loadedProduct ? loadedProduct.name : 'Producto'}
       </h1>
+
+      <LiveRegion message={notice ?? ''} />
 
       {status === 'idle' || status === 'loading' ? <Spinner /> : null}
 
@@ -137,11 +111,7 @@ export function ProductPage() {
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    dispatch(
-                      purchaseStarted({ productId: id, quantity }),
-                    )
-                  }
+                  onClick={requestPurchase}
                   className="w-fit rounded-md bg-gray-800 px-5 py-2 font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
                 >
                   Iniciar compra

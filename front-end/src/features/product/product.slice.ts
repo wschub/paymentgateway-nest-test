@@ -53,8 +53,10 @@ const productSlice = createSlice({
   extraReducers: (builder) => {
     builder.addCase(fetchProduct.pending, (state, action) => {
       state.requestId = action.meta.requestId
-      state.status = 'loading'
       state.error = null
+      if (state.product === null) {
+        state.status = 'loading'
+      }
     })
     builder.addCase(fetchProduct.fulfilled, (state, action) => {
       if (action.meta.requestId !== state.requestId) {
