@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import productReducer, {
   fetchProduct,
+  productOpened,
   quantityChanged,
 } from '@/features/product/product.slice'
 import { httpRequest } from '@/shared/api/http'
@@ -98,6 +99,25 @@ describe('product slice', () => {
     expect(store.getState().product.quantity).toBe(3)
   })
 
+  it('leaves the quantity untouched when no product has loaded', () => {
+    const store = makeStore()
+    store.dispatch(quantityChanged(50))
+    expect(store.getState().product.quantity).toBe(1)
+    expect(store.getState().product.product).toBeNull()
+  })
+
+  it('resets the quantity to one when another product page is opened', async () => {
+    mockedHttpRequest.mockResolvedValue(buildProduct(5))
+    const store = makeStore()
+    await store.dispatch(fetchProduct('a'))
+
+    store.dispatch(quantityChanged(3))
+    expect(store.getState().product.quantity).toBe(3)
+
+    store.dispatch(productOpened())
+    expect(store.getState().product.quantity).toBe(1)
+  })
+
   it('clamps quantity down on a re-read when fresh stock shrinks', async () => {
     mockedHttpRequest.mockResolvedValueOnce(buildProduct(10))
     const store = makeStore()
@@ -147,6 +167,17 @@ describe('product slice', () => {
     expect(store.getState().product.product?.stock).toBe(10)
   })
 
+  it('falls back to a server error when the request rejects without a payload', async () => {
+    mockedHttpRequest.mockRejectedValue(new Error('boom'))
+    const store = makeStore()
+
+    await store.dispatch(fetchProduct('id')).catch(() => undefined)
+
+    const state = store.getState().product
+    expect(state.status).toBe('error')
+    expect(state.error?.kind).toBe('server')
+  })
+
   it('ignores a stale response that resolves after a newer request', async () => {
     const resolvers: Array<(value: unknown) => void> = []
     mockedHttpRequest.mockImplementation(
@@ -171,5 +202,31 @@ describe('product slice', () => {
     const state = store.getState().product
     expect(state.status).toBe('success')
     expect(state.product?.id).toBe('new-id')
+  })
+
+  it('ignores a stale rejected response that resolves after a newer request', async () => {
+    const resolvers: Array<(value: unknown) => void> = []
+    mockedHttpRequest.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    )
+    const store = makeStore()
+
+    const first = store.dispatch(fetchProduct('a'))
+    const second = store.dispatch(fetchProduct('b'))
+
+    await Promise.resolve()
+    resolvers[0]?.(createApiError('network'))
+    await first.catch(() => undefined)
+
+    const stateAfterStaleReject = store.getState().product
+    expect(stateAfterStaleReject.status).toBe('loading')
+    expect(stateAfterStaleReject.error).toBeNull()
+    expect(stateAfterStaleReject.product).toBeNull()
+
+    resolvers[1]?.(buildProduct(5, 'new-id'))
+    await second
+
+    expect(store.getState().product.status).toBe('success')
+    expect(store.getState().product.product?.id).toBe('new-id')
   })
 })

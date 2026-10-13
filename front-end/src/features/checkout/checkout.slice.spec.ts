@@ -1,5 +1,6 @@
 import checkoutReducer, {
   checkoutSlice,
+  purchaseCompleted,
   purchaseStarted,
   quantityChanged,
   restored,
@@ -116,6 +117,20 @@ describe('checkout slice', () => {
     )
     const cleared = checkoutSlice.reducer(started, startOver())
     expect(cleared).toEqual({
+      currentStep: 'product',
+      selectedProductId: null,
+      quantity: 1,
+      delivery: null,
+      transactionId: null,
+    })
+  })
+
+  it('clears all progress on purchaseCompleted', () => {
+    const completed = checkoutSlice.reducer(
+      validRestoredState,
+      purchaseCompleted(),
+    )
+    expect(completed).toEqual({
       currentStep: 'product',
       selectedProductId: null,
       quantity: 1,

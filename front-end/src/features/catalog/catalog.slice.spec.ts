@@ -76,6 +76,17 @@ describe('catalog slice', () => {
     expect(state.lastReadAt).not.toBeNull()
   })
 
+  it('falls back to a server error when the request rejects without a payload', async () => {
+    mockedHttpRequest.mockRejectedValue(new Error('boom'))
+    const store = makeStore()
+
+    await store.dispatch(fetchCatalog()).catch(() => undefined)
+
+    const state = store.getState().catalog
+    expect(state.status).toBe('error')
+    expect(state.error?.kind).toBe('server')
+  })
+
   it('keeps an empty list as success with no items', async () => {
     mockedHttpRequest.mockResolvedValue([])
     const store = makeStore()
@@ -139,5 +150,31 @@ describe('catalog slice', () => {
 
     expect(store.getState().catalog.status).toBe('success')
     expect(store.getState().catalog.items).toEqual(newer)
+  })
+
+  it('ignores a stale rejected response that resolves after a newer request', async () => {
+    const resolvers: Array<(value: unknown) => void> = []
+    mockedHttpRequest.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    )
+    const store = makeStore()
+
+    const first = store.dispatch(fetchCatalog())
+    const second = store.dispatch(fetchCatalog())
+
+    await Promise.resolve()
+    resolvers[0]?.(createApiError('server'))
+    await first.catch(() => undefined)
+
+    const stateAfterStaleReject = store.getState().catalog
+    expect(stateAfterStaleReject.status).toBe('loading')
+    expect(stateAfterStaleReject.error).toBeNull()
+    expect(stateAfterStaleReject.items).toEqual([])
+
+    resolvers[1]?.(products)
+    await second
+
+    expect(store.getState().catalog.status).toBe('success')
+    expect(store.getState().catalog.items).toEqual(products)
   })
 })
