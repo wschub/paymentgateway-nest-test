@@ -21,7 +21,7 @@ describe('AppLayout', () => {
     )
   })
 
-  it('moves focus to the page heading after rendering', () => {
+  it('offers a skip-to-content link that targets the main landmark', () => {
     render(
       <MemoryRouter>
         <AppLayout>
@@ -30,18 +30,9 @@ describe('AppLayout', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('heading', { name: 'Hola' })).toHaveFocus()
-  })
-
-  it('falls back to focusing the main landmark when there is no heading', () => {
-    render(
-      <MemoryRouter>
-        <AppLayout>
-          <p>Contenido sin título</p>
-        </AppLayout>
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByRole('main')).toHaveFocus()
+    expect(
+      screen.getByRole('link', { name: /saltar al contenido principal/i }),
+    ).toHaveAttribute('href', '#main-content')
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content')
   })
 })

@@ -151,6 +151,7 @@ describe('AppRoutes', () => {
     expect(store.getState().checkout.selectedProductId).toBe(products[0].id)
 
     await user.click(screen.getByRole('button', { name: 'Iniciar compra' }))
+    await screen.findByRole('heading', { name: 'Siguiente paso' })
     expect(store.getState().checkout.selectedProductId).toBe(products[1].id)
   })
 
