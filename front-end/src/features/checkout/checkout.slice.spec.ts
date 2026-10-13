@@ -1,5 +1,12 @@
 import checkoutReducer, {
+  cardDisplaySet,
   checkoutSlice,
+  contractsAcceptanceChanged,
+  idempotencyKeySet,
+  installmentsChanged,
+  paymentErrorCleared,
+  paymentFailed,
+  paymentStatusChanged,
   purchaseCompleted,
   purchaseStarted,
   quantityChanged,
@@ -7,9 +14,14 @@ import checkoutReducer, {
   startOver,
   type CheckoutState,
 } from '@/features/checkout/checkout.slice'
-import { MAX_QUANTITY_PER_PURCHASE } from '@/shared/constants'
+import {
+  INSTALLMENTS_DEFAULT,
+  MAX_QUANTITY_PER_PURCHASE,
+} from '@/shared/constants'
+import { createApiError } from '@/shared/api/api.errors'
 
 const CARD_LIKE = /card|cvc|cvv|pan|number|expiry|expiration|security/i
+const ALLOWED_CARD_LIKE = new Set(['cardBrand', 'cardLastFour'])
 
 const collectKeys = (value: unknown): string[] => {
   const keys: string[] = []
@@ -27,12 +39,29 @@ const collectKeys = (value: unknown): string[] => {
 }
 
 const expectNoCardLikeKeys = (value: unknown) => {
-  const offending = collectKeys(value).filter((key) => CARD_LIKE.test(key))
+  const offending = collectKeys(value).filter(
+    (key) => CARD_LIKE.test(key) && !ALLOWED_CARD_LIKE.has(key),
+  )
   expect(offending).toEqual([])
 }
 
-const validRestoredState = {
-  currentStep: 'summary' as const,
+const cleanState = {
+  currentStep: 'product' as const,
+  selectedProductId: null,
+  quantity: 1,
+  delivery: null,
+  transactionId: null,
+  idempotencyKey: null,
+  cardBrand: null,
+  cardLastFour: null,
+  installments: INSTALLMENTS_DEFAULT,
+  contractsAccepted: false,
+  paymentStatus: 'idle' as const,
+  paymentError: null,
+}
+
+const validRestoredState: CheckoutState = {
+  currentStep: 'summary',
   selectedProductId: '11111111-1111-4111-8111-111111111111',
   quantity: 3,
   delivery: {
@@ -44,21 +73,29 @@ const validRestoredState = {
     region: 'Cundinamarca',
   },
   transactionId: 'tx-123',
+  idempotencyKey: 'Abcdefghijklmnop1234',
+  cardBrand: null,
+  cardLastFour: null,
+  installments: INSTALLMENTS_DEFAULT,
+  contractsAccepted: false,
+  paymentStatus: 'idle',
+  paymentError: null,
 }
 
 describe('checkout slice', () => {
-  it('has an initial state with no card-like keys', () => {
+  it('has an initial state with no card-like keys except the display fields', () => {
     const state = checkoutSlice.reducer(undefined, { type: '@@init' })
-    expect(state).toEqual({
-      currentStep: 'product',
-      selectedProductId: null,
-      quantity: 1,
-      delivery: null,
-      transactionId: null,
-    })
+    expect(state).toEqual(cleanState)
     expect(Object.keys(state).sort()).toEqual([
+      'cardBrand',
+      'cardLastFour',
+      'contractsAccepted',
       'currentStep',
       'delivery',
+      'idempotencyKey',
+      'installments',
+      'paymentError',
+      'paymentStatus',
       'quantity',
       'selectedProductId',
       'transactionId',
@@ -110,19 +147,104 @@ describe('checkout slice', () => {
     ).toBe(1)
   })
 
+  it('sets and clears the idempotency key', () => {
+    const withKey = checkoutSlice.reducer(
+      undefined,
+      idempotencyKeySet('Abcdefghijklmnop1234'),
+    )
+    expect(withKey.idempotencyKey).toBe('Abcdefghijklmnop1234')
+
+    const cleared = checkoutSlice.reducer(withKey, idempotencyKeySet(null))
+    expect(cleared.idempotencyKey).toBeNull()
+  })
+
+  it('records only the card display fields via cardDisplaySet', () => {
+    const state = checkoutSlice.reducer(
+      undefined,
+      cardDisplaySet({ brand: 'VISA', lastFour: '4242' }),
+    )
+    expect(state.cardBrand).toBe('VISA')
+    expect(state.cardLastFour).toBe('4242')
+    expectNoCardLikeKeys(state)
+  })
+
+  it('clamps installments to an integer of at least one', () => {
+    expect(
+      checkoutSlice.reducer(undefined, installmentsChanged(3)).installments,
+    ).toBe(3)
+    expect(
+      checkoutSlice.reducer(undefined, installmentsChanged(0)).installments,
+    ).toBe(1)
+    expect(
+      checkoutSlice.reducer(undefined, installmentsChanged(-2)).installments,
+    ).toBe(1)
+    expect(
+      checkoutSlice.reducer(undefined, installmentsChanged(2.7)).installments,
+    ).toBe(2)
+    expect(
+      checkoutSlice.reducer(undefined, installmentsChanged(NaN)).installments,
+    ).toBe(INSTALLMENTS_DEFAULT)
+  })
+
+  it('records the contracts acceptance flag', () => {
+    expect(
+      checkoutSlice.reducer(undefined, contractsAcceptanceChanged(true))
+        .contractsAccepted,
+    ).toBe(true)
+    expect(
+      checkoutSlice.reducer(undefined, contractsAcceptanceChanged(false))
+        .contractsAccepted,
+    ).toBe(false)
+  })
+
+  it('tracks payment status and clears the error on a non-error status', () => {
+    const failed = checkoutSlice.reducer(
+      undefined,
+      paymentFailed(createApiError('providerRejected')),
+    )
+    expect(failed.paymentStatus).toBe('error')
+    expect(failed.paymentError?.kind).toBe('providerRejected')
+
+    const paying = checkoutSlice.reducer(failed, paymentStatusChanged('paying'))
+    expect(paying.paymentStatus).toBe('paying')
+    expect(paying.paymentError).toBeNull()
+  })
+
+  it('clears the payment error explicitly', () => {
+    const failed = checkoutSlice.reducer(
+      undefined,
+      paymentFailed(createApiError('network')),
+    )
+    const cleared = checkoutSlice.reducer(failed, paymentErrorCleared())
+    expect(cleared.paymentError).toBeNull()
+    expect(cleared.paymentStatus).toBe('idle')
+  })
+
   it('clears everything on startOver', () => {
-    const started = checkoutSlice.reducer(
+    let started = checkoutSlice.reducer(
       undefined,
       purchaseStarted({ productId: 'p-1', quantity: 4 }),
     )
+    started = checkoutSlice.reducer(
+      started,
+      idempotencyKeySet('Abcdefghijklmnop1234'),
+    )
+    started = checkoutSlice.reducer(
+      started,
+      cardDisplaySet({ brand: 'VISA', lastFour: '4242' }),
+    )
+    started = checkoutSlice.reducer(
+      started,
+      contractsAcceptanceChanged(true),
+    )
+    started = checkoutSlice.reducer(started, installmentsChanged(3))
+    started = checkoutSlice.reducer(
+      started,
+      paymentFailed(createApiError('server')),
+    )
+
     const cleared = checkoutSlice.reducer(started, startOver())
-    expect(cleared).toEqual({
-      currentStep: 'product',
-      selectedProductId: null,
-      quantity: 1,
-      delivery: null,
-      transactionId: null,
-    })
+    expect(cleared).toEqual(cleanState)
   })
 
   it('clears all progress on purchaseCompleted', () => {
@@ -130,13 +252,7 @@ describe('checkout slice', () => {
       validRestoredState,
       purchaseCompleted(),
     )
-    expect(completed).toEqual({
-      currentStep: 'product',
-      selectedProductId: null,
-      quantity: 1,
-      delivery: null,
-      transactionId: null,
-    })
+    expect(completed).toEqual(cleanState)
   })
 
   it('restores a persisted selection via restored', () => {
@@ -145,6 +261,24 @@ describe('checkout slice', () => {
       restored(validRestoredState),
     )
     expect(state).toEqual(validRestoredState)
+  })
+
+  it('resets the in-memory and payment fields on restore', () => {
+    let state = checkoutSlice.reducer(
+      undefined,
+      cardDisplaySet({ brand: 'VISA', lastFour: '4242' }),
+    )
+    state = checkoutSlice.reducer(state, paymentFailed(createApiError('server')))
+    state = checkoutSlice.reducer(
+      state,
+      restored({ ...validRestoredState, idempotencyKey: null }),
+    )
+
+    expect(state.cardBrand).toBeNull()
+    expect(state.cardLastFour).toBeNull()
+    expect(state.paymentStatus).toBe('idle')
+    expect(state.paymentError).toBeNull()
+    expect(state.idempotencyKey).toBeNull()
   })
 
   it('never holds card-like keys in state or in the accepted payloads', () => {
@@ -172,6 +306,13 @@ describe('checkout slice', () => {
     expect(typeof state.quantity).toBe('number')
     expect(state.delivery).toBeNull()
     expect(state.transactionId).toBeNull()
+    expect(state.idempotencyKey).toBeNull()
+    expect(state.cardBrand).toBeNull()
+    expect(state.cardLastFour).toBeNull()
+    expect(state.installments).toBe(INSTALLMENTS_DEFAULT)
+    expect(state.contractsAccepted).toBe(false)
+    expect(state.paymentStatus).toBe('idle')
+    expect(state.paymentError).toBeNull()
   })
 
   it('has a default export reducer named checkout for the store', () => {

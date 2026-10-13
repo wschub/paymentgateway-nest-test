@@ -17,6 +17,7 @@ import {
   type PersistedProgress,
   type StorageLike,
 } from '@/features/checkout/persistence'
+import { INSTALLMENTS_DEFAULT } from '@/shared/constants'
 
 const CARD_LIKE = /card|cvc|cvv|pan|number|expiry|expiration|security/i
 
@@ -48,6 +49,7 @@ const validStored = (overrides: Partial<PersistedProgress> = {}): PersistedProgr
   quantity: 3,
   delivery: null,
   transactionId: null,
+  idempotencyKey: null,
   ...overrides,
 })
 
@@ -108,10 +110,22 @@ describe('loadPersistedProgress', () => {
       quantity: 3,
       delivery: stored.delivery,
       transactionId: 'tx-1',
+      idempotencyKey: null,
     })
   })
 
-  it('downcasts an old version to a preloaded checkout state', () => {
+  it('loads a valid idempotency key from a version-2 document', () => {
+    const stored = validStored({ idempotencyKey: 'Abcdefghijklmnop1234' })
+    const { storage } = createFakeStorage({
+      [PERSISTENCE_STORAGE_KEY]: JSON.stringify(stored),
+    })
+
+    expect(loadPersistedProgress(storage)?.idempotencyKey).toBe(
+      'Abcdefghijklmnop1234',
+    )
+  })
+
+  it('turns a stored document into a preloaded checkout state', () => {
     const stored = validStored()
     const { storage } = createFakeStorage({ [PERSISTENCE_STORAGE_KEY]: JSON.stringify(stored) })
     const loaded = loadPersistedProgress(storage)
@@ -122,12 +136,20 @@ describe('loadPersistedProgress', () => {
       quantity: 3,
       delivery: null,
       transactionId: null,
+      idempotencyKey: null,
+      cardBrand: null,
+      cardLastFour: null,
+      installments: INSTALLMENTS_DEFAULT,
+      contractsAccepted: false,
+      paymentStatus: 'idle',
+      paymentError: null,
     })
   })
 
   it.each([
     ['not valid JSON', '{{'],
     ['wrong version', JSON.stringify(validStored({ version: 99 }))],
+    ['version 1 (old schema)', JSON.stringify(validStored({ version: 1 }))],
     ['version not an integer', JSON.stringify(validStored({ version: 1.5 }))],
     [
       'missing savedAt',
@@ -188,6 +210,22 @@ describe('loadPersistedProgress', () => {
     [
       'transaction id not a string',
       JSON.stringify(validStored({ transactionId: 5 as unknown as string })),
+    ],
+    [
+      'missing idempotency key',
+      JSON.stringify({ ...validStored(), idempotencyKey: undefined }),
+    ],
+    [
+      'idempotency key too short',
+      JSON.stringify(validStored({ idempotencyKey: 'short' })),
+    ],
+    [
+      'idempotency key with disallowed characters',
+      JSON.stringify(validStored({ idempotencyKey: 'has spaces and !!!!!!' })),
+    ],
+    [
+      'idempotency key not a string',
+      JSON.stringify(validStored({ idempotencyKey: 7 as unknown as string })),
     ],
   ])('discards and clears the stored item when: %s', (_description, raw) => {
     const { storage } = createFakeStorage({ [PERSISTENCE_STORAGE_KEY]: String(raw) })
@@ -330,6 +368,7 @@ describe('subscribeCheckoutProgress', () => {
     expect(Object.keys(written).sort()).toEqual([
       'currentStep',
       'delivery',
+      'idempotencyKey',
       'quantity',
       'savedAt',
       'selectedProductId',
@@ -342,6 +381,7 @@ describe('subscribeCheckoutProgress', () => {
     expect(written.quantity).toBe(2)
     expect(written.delivery).toBeNull()
     expect(written.transactionId).toBeNull()
+    expect(written.idempotencyKey).toBeNull()
     expect(typeof written.savedAt).toBe('string')
     expect(Number.isNaN(Date.parse(written.savedAt))).toBe(false)
   })
@@ -464,6 +504,7 @@ describe('serialized document invariant', () => {
       'quantity',
       'delivery',
       'transactionId',
+      'idempotencyKey',
       'savedAt',
     ])
   })

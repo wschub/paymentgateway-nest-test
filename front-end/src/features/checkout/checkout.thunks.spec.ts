@@ -40,6 +40,13 @@ const startedCheckout = (): CheckoutState => ({
   quantity: 3,
   delivery: null,
   transactionId: null,
+  idempotencyKey: null,
+  cardBrand: null,
+  cardLastFour: null,
+  installments: 1,
+  contractsAccepted: false,
+  paymentStatus: 'idle',
+  paymentError: null,
 })
 
 const makeStore = (checkout: CheckoutState) =>
@@ -60,6 +67,13 @@ describe('restoreProgress thunk', () => {
       quantity: 1,
       delivery: null,
       transactionId: null,
+      idempotencyKey: null,
+      cardBrand: null,
+      cardLastFour: null,
+      installments: 1,
+      contractsAccepted: false,
+      paymentStatus: 'idle',
+      paymentError: null,
     })
 
     const outcome = await store.dispatch(restoreProgress()).unwrap()
@@ -132,7 +146,7 @@ describe('restoreProgress thunk', () => {
     map.set(
       PERSISTENCE_STORAGE_KEY,
       JSON.stringify({
-        version: 1,
+        version: 2,
         savedAt: new Date().toISOString(),
         ...startedCheckout(),
       }),

@@ -53,13 +53,14 @@ const createFakeStorage = () => {
 
 const freshValidDoc = (overrides: Record<string, unknown> = {}) =>
   JSON.stringify({
-    version: 1,
+    version: 2,
     savedAt: new Date().toISOString(),
     currentStep: 'product',
     selectedProductId: PRODUCT_ID,
     quantity: 3,
     delivery: null,
     transactionId: null,
+    idempotencyKey: null,
     ...overrides,
   })
 
@@ -93,6 +94,13 @@ describe('store', () => {
         quantity: 3,
         delivery: null,
         transactionId: 'tx-1',
+        idempotencyKey: null,
+        cardBrand: null,
+        cardLastFour: null,
+        installments: 1,
+        contractsAccepted: false,
+        paymentStatus: 'idle',
+        paymentError: null,
       },
     })
     expect(instance.getState().checkout).toMatchObject({
@@ -190,6 +198,13 @@ describe('store persistence wiring', () => {
           quantity: 1,
           delivery: null,
           transactionId: null,
+          idempotencyKey: null,
+          cardBrand: null,
+          cardLastFour: null,
+          installments: 1,
+          contractsAccepted: false,
+          paymentStatus: 'idle',
+          paymentError: null,
         },
       },
     })
