@@ -100,18 +100,18 @@ status is re-read from the back-end and no second payment is started.
 
 ### Tests for User Story 2 ⚠️ (write first; ensure they FAIL)
 
-- [ ] T024 [P] [US2] Polling tests in `front-end/src/features/checkout/usePaymentPolling.spec.ts`: starts while `pending`, reads on a fixed `STATUS_POLL_INTERVAL_MS` (2000 ms) with no backoff, stops on a final status, stops at `STATUS_POLL_CEILING_MS` (40000 ms) leaving the pending state plus the manual re-check, and cancels on unmount.
-- [ ] T025 [US2] `readTransactionStatus` and recovery tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: GET `/transactions/:id` updates the view; startup with a persisted `transactionId` reads status and dispatches **no** `createTransaction`/`payTransaction`; unknown id → `notFound`.
-- [ ] T026 [US2] `PaymentStatus` component tests in `front-end/src/features/checkout/PaymentStatus.spec.tsx`: pending spinner + manual "re-check", and the approved/declined/voided/error renders with the right result and messages.
+- [X] T024 [P] [US2] Polling tests in `front-end/src/features/checkout/usePaymentPolling.spec.ts`: starts while `pending`, reads on a fixed `STATUS_POLL_INTERVAL_MS` (2000 ms) with no backoff, stops on a final status, stops at `STATUS_POLL_CEILING_MS` (40000 ms) leaving the pending state plus the manual re-check, and cancels on unmount.
+- [X] T025 [US2] `readTransactionStatus` and recovery tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: GET `/transactions/:id` updates the view; startup with a persisted `transactionId` reads status and dispatches **no** `createTransaction`/`payTransaction`; unknown id → `notFound`.
+- [X] T026 [US2] `PaymentStatus` component tests in `front-end/src/features/checkout/PaymentStatus.spec.tsx`: pending spinner + manual "re-check", and the approved/declined/voided/error renders with the right result and messages.
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Implement the `readTransactionStatus` thunk (GET `/transactions/:id`) in `front-end/src/features/checkout/checkout.thunks.ts`, updating `paymentStatus`/`paymentError` and the transaction view.
-- [ ] T028 [US2] Implement `front-end/src/features/checkout/usePaymentPolling.ts` (fixed 2 s interval up to the 40 s ceiling, cancel on unmount) driven by the current `transactionId` and `paymentStatus`.
-- [ ] T029 [US2] Implement `front-end/src/features/checkout/PaymentStatus.tsx`: pending state with a manual re-check, and final states (approved → delivery assigned; declined/voided/error → reserved stock released).
-- [ ] T030 [US2] Wire refresh recovery in `front-end/src/app/store.ts` + `checkout.thunks.ts`: on startup, if the restored state has a `transactionId`, open the payment step in a "verifying" state and dispatch `readTransactionStatus` instead of any create/pay.
-- [ ] T044 [P] [US2] Refresh-recovery UI tests in `front-end/src/features/checkout/usePaymentPolling.spec.ts` and `front-end/src/features/checkout/CheckoutModal.spec.tsx`: with a restored `transactionId` the payment step shows "verificando" and never an approved/failed result until `GET /transactions/:id` responds; responses arriving **out of order** are ignored — only the latest `requestId` result is applied.
-- [ ] T045 [US2] Implement the "verifying" initial state and the request-id ordering guard in `front-end/src/features/checkout/usePaymentPolling.ts` (+ the `store.ts` recovery path): track the latest `requestId` and drop any stale response so an older read cannot overwrite a newer final status.
+- [X] T027 [US2] Implement the `readTransactionStatus` thunk (GET `/transactions/:id`) in `front-end/src/features/checkout/checkout.thunks.ts`, updating `paymentStatus`/`paymentError` and the transaction view.
+- [X] T028 [US2] Implement `front-end/src/features/checkout/usePaymentPolling.ts` (fixed 2 s interval up to the 40 s ceiling, cancel on unmount) driven by the current `transactionId` and `paymentStatus`.
+- [X] T029 [US2] Implement `front-end/src/features/checkout/PaymentStatus.tsx`: pending state with a manual re-check, and final states (approved → delivery assigned; declined/voided/error → reserved stock released).
+- [X] T030 [US2] Wire refresh recovery in `front-end/src/app/store.ts` + `checkout.thunks.ts`: on startup, if the restored state has a `transactionId`, open the payment step in a "verifying" state and dispatch `readTransactionStatus` instead of any create/pay.
+- [X] T044 [P] [US2] Refresh-recovery UI tests in `front-end/src/features/checkout/usePaymentPolling.spec.ts` and `front-end/src/features/checkout/CheckoutModal.spec.tsx`: with a restored `transactionId` the payment step shows "verificando" and never an approved/failed result until `GET /transactions/:id` responds; responses arriving **out of order** are ignored — only the latest `requestId` result is applied.
+- [X] T045 [US2] Implement the "verifying" initial state and the request-id ordering guard in `front-end/src/features/checkout/usePaymentPolling.ts` (+ the `store.ts` recovery path): track the latest `requestId` and drop any stale response so an older read cannot overwrite a newer final status.
 
 **Checkpoint**: US1 and US2 both work — a payment can be confirmed and survives a mid-payment refresh.
 
