@@ -128,6 +128,20 @@ describe('catalog slice', () => {
     expect(state.error).toBeNull()
   })
 
+  it('re-reads and replaces the previous list with the freshest response', async () => {
+    mockedHttpRequest.mockResolvedValueOnce(products)
+    const store = makeStore()
+    await store.dispatch(fetchCatalog())
+    expect(store.getState().catalog.items).toEqual(products)
+
+    const fresher = [{ ...products[0], stock: 2 }]
+    mockedHttpRequest.mockResolvedValueOnce(fresher)
+    await store.dispatch(fetchCatalog())
+
+    expect(store.getState().catalog.status).toBe('success')
+    expect(store.getState().catalog.items).toEqual(fresher)
+  })
+
   it('ignores a stale response whose request id is no longer the latest', async () => {
     const resolvers: Array<(value: unknown) => void> = []
     mockedHttpRequest.mockImplementation(

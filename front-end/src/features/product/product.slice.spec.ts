@@ -167,6 +167,20 @@ describe('product slice', () => {
     expect(store.getState().product.product?.stock).toBe(10)
   })
 
+  it('keeps the loaded product visible during a re-read instead of resetting to loading', async () => {
+    mockedHttpRequest.mockResolvedValueOnce(buildProduct(10))
+    const store = makeStore()
+    await store.dispatch(fetchProduct('11111111-1111-4111-8111-111111111111'))
+    expect(store.getState().product.status).toBe('success')
+
+    mockedHttpRequest.mockImplementation(() => new Promise(() => {}))
+    store.dispatch(fetchProduct('11111111-1111-4111-8111-111111111111'))
+
+    const state = store.getState().product
+    expect(state.status).toBe('success')
+    expect(state.product?.stock).toBe(10)
+  })
+
   it('falls back to a server error when the request rejects without a payload', async () => {
     mockedHttpRequest.mockRejectedValue(new Error('boom'))
     const store = makeStore()

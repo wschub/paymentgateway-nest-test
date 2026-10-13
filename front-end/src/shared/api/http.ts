@@ -1,4 +1,4 @@
-import { API_URL } from '@/config'
+import { API_URL, IS_DEV } from '@/config'
 import {
   createApiError,
   type ApiError,
@@ -10,6 +10,23 @@ export const DEFAULT_TIMEOUT_MS = 10_000
 export interface HttpOptions {
   timeoutMs?: number
   map400ToNotFound?: boolean
+}
+
+function logRequestFailure(
+  kind: ApiErrorKind,
+  path: string,
+  status?: number,
+): void {
+  if (!IS_DEV) {
+    return
+  }
+  const safePath = path.split(/[?#]/)[0]
+  const tokens = ['api request failed', `kind=${kind}`]
+  if (typeof status === 'number') {
+    tokens.push(`status=${status}`)
+  }
+  tokens.push(`path=${safePath}`)
+  console.debug(tokens.join(' '))
 }
 
 export function isApiError(value: unknown): value is ApiError {
@@ -40,6 +57,7 @@ export async function httpRequest<T>(
   options: HttpOptions = {},
 ): Promise<T | ApiError> {
   if (API_URL.trim().length === 0) {
+    logRequestFailure('server', path)
     return createApiError('server')
   }
 
@@ -55,11 +73,14 @@ export async function httpRequest<T>(
     })
 
     if (!response.ok) {
-      return createApiError(mapStatusToKind(response.status, options))
+      const kind = mapStatusToKind(response.status, options)
+      logRequestFailure(kind, path, response.status)
+      return createApiError(kind)
     }
 
     const text = await response.text()
     if (text.trim().length === 0) {
+      logRequestFailure('server', path, response.status)
       return createApiError('server')
     }
 
@@ -67,15 +88,18 @@ export async function httpRequest<T>(
     try {
       parsed = JSON.parse(text)
     } catch {
+      logRequestFailure('server', path, response.status)
       return createApiError('server')
     }
 
     if (parsed === null || parsed === undefined) {
+      logRequestFailure('server', path, response.status)
       return createApiError('server')
     }
 
     return parsed as T
   } catch {
+    logRequestFailure('network', path)
     return createApiError('network')
   } finally {
     clearTimeout(timer)
