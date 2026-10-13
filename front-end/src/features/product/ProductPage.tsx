@@ -11,6 +11,7 @@ import { quantityChanged } from '@/features/product/product.slice'
 import { useProductReRead } from '@/features/product/useProductReRead'
 import { QuantitySelector } from '@/features/product/QuantitySelector'
 import {
+  selectCheckoutStep,
   selectIdempotencyKey,
   selectPurchaseQuantity,
   selectSelectedProductId,
@@ -46,12 +47,21 @@ export function ProductPage() {
   const selectedProductId = useAppSelector(selectSelectedProductId)
   const checkoutQuantity = useAppSelector(selectPurchaseQuantity)
   const idempotencyKey = useAppSelector(selectIdempotencyKey)
+  const checkoutStep = useAppSelector(selectCheckoutStep)
 
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [finalDismissed, setFinalDismissed] = useState(false)
 
   const { notice, requestPurchase, retry } = useProductReRead(id)
 
   const resumed = selectedProductId !== null && selectedProductId === id
+  const autoOpen = resumed && checkoutStep === 'finalStatus' && !finalDismissed
+  const modalOpen = checkoutOpen || autoOpen
+
+  const closeCheckout = () => {
+    setCheckoutOpen(false)
+    setFinalDismissed(true)
+  }
   const loadedProduct = status === 'success' ? product : null
   const purchasable = loadedProduct ? isPurchasable(loadedProduct.stock) : false
   const notFound = status === 'error' && error?.kind === 'notFound'
@@ -184,7 +194,7 @@ export function ProductPage() {
         </div>
       ) : null}
 
-      <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+      <CheckoutModal open={modalOpen} onClose={closeCheckout} />
     </div>
   )
 }
