@@ -50,6 +50,22 @@ describe('ESLint layering restrictions', () => {
     expect(hasRule(messages, 'no-restricted-globals')).toBe(false)
   })
 
+  it('allows fetch inside the tokenization seam', () => {
+    const messages = lint(
+      'export const tokenize = () => fetch("https://provider.test/tokens/cards")\n',
+      'src/shared/api/payment-provider.ts',
+    )
+    expect(hasRule(messages, 'no-restricted-globals')).toBe(false)
+  })
+
+  it('flags a direct fetch call in the checkout feature', () => {
+    const messages = lint(
+      'export const load = () => fetch("/transactions")\n',
+      'src/features/checkout/leaky.ts',
+    )
+    expect(hasRule(messages, 'no-restricted-globals')).toBe(true)
+  })
+
   it('flags import.meta outside the config seam', () => {
     const messages = lint(
       'export const url = import.meta.env.VITE_API_URL\n',

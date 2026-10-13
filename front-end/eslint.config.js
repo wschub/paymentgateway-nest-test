@@ -34,7 +34,7 @@ export default defineConfig([
         {
           name: 'fetch',
           message:
-            'Call fetch only inside src/shared/api/http.ts; everywhere else use the httpRequest wrapper.',
+            'Call fetch only inside src/shared/api/http.ts or src/shared/api/payment-provider.ts; everywhere else use the httpRequest wrapper.',
         },
       ],
       'no-restricted-syntax': [
@@ -53,7 +53,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/shared/api/http.ts'],
+    files: ['src/shared/api/http.ts', 'src/shared/api/payment-provider.ts'],
     rules: {
       'no-restricted-globals': 'off',
     },
