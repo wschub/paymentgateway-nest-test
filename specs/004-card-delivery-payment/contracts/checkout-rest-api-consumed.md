@@ -30,9 +30,11 @@ The SPA consumes the **existing** back-end endpoints from feature 002. It sends 
   call does **not** charge again.
 - **`200 OK`**: only when the provider already answered a final status at creation time.
 - **Errors**: `400` → `badRequest`; `404 TRANSACTION_NOT_FOUND` → `notFound`; `409 TRANSACTION_NOT_PAYABLE` →
-  `notPayable`; `422 CONTRACTS_NOT_ACCEPTED` → `contractsNotAccepted`; `422 INVALID_PAYMENT_TOKEN` → `invalidToken`
-  (claim cleared; shopper can retry with a new token); `502 PAYMENT_PROVIDER_REJECTED` → `providerRejected`;
-  `503 PAYMENT_PROVIDER_UNAVAILABLE` → `providerUnavailable` (claim kept; reconcile by reference on retry).
+  `notPayable` (discard the token); `422 CONTRACTS_NOT_ACCEPTED` → `contractsNotAccepted`; `422 INVALID_PAYMENT_TOKEN` →
+  `invalidToken` (token discarded; shopper re-enters the card and retries with the same key); `502 PAYMENT_PROVIDER_REJECTED` →
+  `providerRejected`; `503 PAYMENT_PROVIDER_UNAVAILABLE` → `providerUnavailable` (claim kept; **keep the token and
+  key**, retry re-sends the same token and reconciles by reference); `timeout`/`network` behaves like `503` (keep
+  token and key).
 
 ## GET /transactions/:id
 
@@ -62,7 +64,10 @@ The SPA consumes the **existing** back-end endpoints from feature 002. It sends 
 
 - `POST /transactions` is called by **Continuar** (creates the `PENDING` purchase); `POST /transactions/:id/payment`
   is called later by **Pagar** with the single-use token held in memory. A refresh between the two re-enters the
-  card and replays `POST /transactions` with the same key (same `id`/`reference`).
+  card and replays `POST /transactions` with the same key (same `id`/`reference`). When Pagar fails with
+  `network`/timeout/`503`, the token is **kept** and the retry re-sends the same token with the same key (no new
+  `POST /transactions`); on any other response (`202`/`200`, `invalidToken`, any `409`, modal close, final state)
+  the token is **discarded**.
 
 ## Idempotency and amount rules
 

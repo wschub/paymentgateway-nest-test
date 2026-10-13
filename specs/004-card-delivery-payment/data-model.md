@@ -60,17 +60,20 @@ Extends the 003 state. New fields are non-sensitive.
 | `idempotencyKey` | string \| null | 16–64 `[A-Za-z0-9_-]`; **new**; persisted (version 2) |
 | `cardBrand` | string \| null | non-sensitive; in-memory only (not persisted) |
 | `cardLastFour` | string \| null | non-sensitive; in-memory only |
-| `cardToken` | string \| null | single-use token produced at **Continuar**; **in-memory only, never persisted**; discarded after Pagar uses it, on close, and on any final state |
+| `cardToken` | string \| null | single-use token produced at **Continuar**; **in-memory only, never persisted**; **kept** across a `network`/timeout/`503` at Pagar (the retry re-sends the same token with the same key; the back-end reconciles the pending claim by reference); **discarded** on payment `202`/`200`, on `422 invalidToken`, on any `409`, on modal close, and on any final state |
 | `installments` | integer | default 1; in-memory only |
 | `contractsAccepted` | boolean | both contracts ticked; in-memory only |
 | `paymentStatus` | `'idle' \| 'creating' \| 'paying' \| 'pending' \| 'approved' \| 'declined' \| 'voided' \| 'error'` | in-memory lifecycle |
 | `paymentError` | `ApiError \| null` | safe object; drives the message and next action |
 
 There is still **no** card number, CVC or expiry field. `DeliveryData` stays: `fullName`, `email`, `phone`,
-`address`, `city`, `region`, `notes?`, validated as: `fullName` required and ≤ 120 chars, `email` well-formed,
-`phone` 7–20 chars, `address`/`city`/`region` required, `notes` optional and ≤ 500 chars. `cardToken` is the one
-new field that must **never** be persisted: it is excluded from `StorableCheckout`/the persisted document and
-from `toStorableCheckout`.
+`address`, `city`, `region`, `notes?`, validated to the **same rules as the back-end DTO**
+(`back-end/src/infrastructure/http/create-transaction.dto.ts`, sourced from `customer.rules.ts` and
+`delivery.rules.ts`): `fullName` required and ≤ 120, `email` matches `EMAIL_PATTERN`, `phone` matches
+`PHONE_PATTERN` (7–20 of digits/`+`/space), `address`/`city`/`region` required, `notes` optional and ≤ 500; the
+front-end copies the constants `FULL_NAME_MAX_LENGTH`, `EMAIL_PATTERN`, `PHONE_PATTERN` and `NOTES_MAX_LENGTH`
+into `shared/constants.ts` so both sides cannot drift. `cardToken` is the one new field that must **never** be
+persisted: it is excluded from `StorableCheckout`/the persisted document and from `toStorableCheckout`.
 
 ## Local (non-Redux, non-persisted) state: card form
 
@@ -140,11 +143,11 @@ Plain serializable objects with a `kind` and a safe `message`, never shown with 
 | `product` (choice recorded) | shopper opens the modal | `cardAndDelivery` (idempotency key generated, persisted) |
 | `cardAndDelivery` | **Continuar**: valid delivery + card and both contracts; card tokenized | `summary` (create pending transaction; token held in memory) |
 | `cardAndDelivery` | **Continuar** with an existing pending `transactionId` | `summary` (same key replays the pending purchase, same id/reference) |
-| `summary` | **Pagar** | `finalStatus` (pending; token sent then discarded) |
-| `summary` | back-end answers a final status at payment creation (rare) | `finalStatus` (final) |
+| `summary` | **Pagar** accepted (`202`/`200`) | `finalStatus` (pending; token discarded as used) |
+| `summary` | back-end answers a final status at payment creation (rare) | `finalStatus` (final; token discarded) |
 | `summary` | refresh / reopen (token is memory-only) | `cardAndDelivery` (same key; re-enter the card) |
-| `summary` | **Pagar** rejected `invalidToken` | `cardAndDelivery` (same `transactionId` + key; re-enter the card) |
-| `summary` | **Pagar** rejected `providerUnavailable`/`network` | `summary` (same `transactionId` + key; retry Pagar) |
+| `summary` | **Pagar** rejected `invalidToken` | `cardAndDelivery` (same `transactionId` + key; re-enter the card; token discarded) |
+| `summary` | **Pagar** rejected `providerUnavailable`/`network` | `summary` (same `transactionId` + key + **same token kept**; retry Pagar) |
 | `finalStatus` (pending) | read/poll returns a final status | `finalStatus` (approved/declined/voided/error) |
 | `finalStatus` (approved) | shopper leaves | progress cleared |
 | `finalStatus` (declined/voided/error, incl. `RESERVATION_EXPIRED`) | shopper retries with a new card | `cardAndDelivery` (`transactionId` cleared, **new** idempotency key) |

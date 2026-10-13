@@ -47,7 +47,10 @@ below consolidate the decisions the design relies on. Each follows Decision / Ra
   **while the purchase stays `PENDING`** (network failure, 503, `invalidToken`, idempotent replay). Once the
   purchase reaches a final `DECLINED`, `VOIDED` or `ERROR` state (including `RESERVATION_EXPIRED`), clear
   `transactionId` and generate a **new** key before retrying. Disable the continue/pay button and ignore
-  re-entrant submits while a request is in flight.
+  re-entrant submits while a request is in flight. The card token follows the same retry policy: it is kept
+  across a `network`/timeout/`503` so the retry re-sends the **same** token with the **same** key (the back-end
+  reconciles the pending claim by reference), and it is discarded once the payment is accepted (`202`/`200`), on
+  `invalidToken` (re-enter the card with the same key), on any `409`, on modal close and on any final state.
 - **Rationale**: The back-end replays the same key with the same payload (returns the existing purchase) and
   rejects a different payload with `IDEMPOTENCY_KEY_REUSED` (409). Persisting the key is what makes a
   refresh-mid-payment replay instead of double-charge. A final non-approved purchase must not be retried under
@@ -157,8 +160,11 @@ below consolidate the decisions the design relies on. Each follows Decision / Ra
   delivery + card data and the contracts, tokenizes the card (R1) and creates the pending purchase
   (`POST /transactions`); the modal then shows the **summary** with the server-computed amounts and a **Pagar**
   button that calls `POST /transactions/:id/payment` with the token. The single-use token lives only in
-  non-persisted Redux memory (`cardToken`) between the two steps and is discarded after use. A refresh on the
-  summary step (token gone) returns to `cardAndDelivery` with the same key, which replays the pending purchase.
+  non-persisted Redux memory (`cardToken`): it is **kept** across a `network`/timeout/`503` at Pagar so the retry
+  re-sends the same token with the same key (the back-end reconciles the pending claim by reference), and it is
+  **discarded** once the payment is accepted (`202`/`200`), on `invalidToken` (re-enter the card), on any `409`,
+  on modal close and on any final state. A refresh on the summary step (token gone) returns to `cardAndDelivery`
+  with the same key, which replays the pending purchase.
 - **Rationale**: Creating the purchase at Continuar means the shopper reviews the real server amounts before
   paying, and a modal closed before Pagar leaves a pending purchase that expires safely (D9) rather than an
   orphan. Keeping the token out of the persisted document preserves Principle V while still allowing a two-step
@@ -173,6 +179,10 @@ below consolidate the decisions the design relies on. Each follows Decision / Ra
   email shape, phone 7–20 chars, address/city/region required, notes optional and ≤ 500 chars) and a
   `toTransactionPayload(delivery)` mapper that turns the flat form into the back-end shape
   `{ customer: { fullName, email, phone }, delivery: { address, city, region, notes? } }`. Pure and unit-tested.
+  The rules reuse **exactly** the back-end constants — `FULL_NAME_MAX_LENGTH = 120`, `NOTES_MAX_LENGTH = 500`,
+  `EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/`, `PHONE_PATTERN = /^[0-9+ ]{7,20}$/` from
+  `back-end/src/infrastructure/http/create-transaction.dto.ts` (`customer.rules.ts`/`delivery.rules.ts`) —
+  copied into `front-end/src/shared/constants.ts` with a source comment, so the two sides cannot drift.
 - **Rationale**: FR-001 requires validating delivery before payment; the back-end expects the nested shape, so
   the mapping belongs next to the validators. Pure functions keep the component thin and testable.
 - **Alternatives considered**: Validate inline in the component — rejected: harder to test and reuse; send the

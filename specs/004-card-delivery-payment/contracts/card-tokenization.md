@@ -49,7 +49,10 @@ from the card form's **local** state and are discarded as soon as the request se
 
 - `data.id` is the **single-use** token passed to `POST /transactions/:id/payment` as `cardToken`. It is held
   only in non-persisted memory (`cardToken`) between **Continuar** (which tokenizes) and **Pagar** (which uses
-  it), and is discarded after use or when the modal closes; it is never written to `localStorage`.
+  it) and is never written to `localStorage`. Lifecycle: it is **kept** across a `network`/timeout/`503` at Pagar
+  (the retry re-sends the same token with the same key; the back-end reconciles the pending claim by reference)
+  and **discarded** on payment `202`/`200`, on `422 invalidToken` (re-enter the card), on any `409`, when the
+  modal closes and on any final state.
 - `data.brand` (normalized to a display string) and `data.last_four` are kept in memory for the summary/status
   UI only and are never persisted.
 
