@@ -72,6 +72,7 @@ describe('store', () => {
     expect(Object.keys(state).sort()).toEqual([
       'catalog',
       'checkout',
+      'checkoutConfig',
       'product',
     ])
   })

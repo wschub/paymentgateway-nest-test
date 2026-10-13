@@ -3,6 +3,8 @@ import type {
   DeliveryData,
   PaymentStatus,
 } from '@/features/checkout/checkout.slice'
+import type { CheckoutConfigStatus } from '@/features/checkout/checkout-config.slice'
+import type { CheckoutConfig } from '@/features/checkout/checkout.types'
 import type { ApiError } from '@/shared/api/api.errors'
 
 export const selectCheckoutStep = (state: RootState) =>
@@ -46,3 +48,14 @@ export const selectHasStartedPurchase = (state: RootState) =>
 
 export const selectDeliveryProvided = (state: RootState) =>
   state.checkout.delivery !== null
+
+export const selectCheckoutConfig = (state: RootState): CheckoutConfig | null =>
+  state.checkoutConfig.config
+
+export const selectCheckoutConfigStatus = (
+  state: RootState,
+): CheckoutConfigStatus => state.checkoutConfig.status
+
+export const selectCheckoutConfigError = (
+  state: RootState,
+): ApiError | null => state.checkoutConfig.error

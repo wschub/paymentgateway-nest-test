@@ -3,7 +3,17 @@ import checkoutReducer, {
   type CheckoutState,
 } from '@/features/checkout/checkout.slice'
 import productReducer from '@/features/product/product.slice'
-import { restoreProgress } from '@/features/checkout/checkout.thunks'
+import {
+  createTransaction,
+  loadCheckoutConfig,
+  payTransaction,
+  restoreProgress,
+} from '@/features/checkout/checkout.thunks'
+import checkoutConfigReducer from '@/features/checkout/checkout-config.slice'
+import type {
+  CheckoutConfig,
+  TransactionView,
+} from '@/features/checkout/checkout.types'
 import {
   PERSISTENCE_STORAGE_KEY,
   subscribeCheckoutProgress,
@@ -161,5 +171,216 @@ describe('restoreProgress thunk', () => {
     await store.dispatch(restoreProgress()).unwrap()
     expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
     expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+  })
+})
+
+const CONFIG: CheckoutConfig = {
+  publicKey: 'pub_test_abc',
+  baseUrl: 'https://sandbox.gateway.test/v1',
+  currency: 'COP',
+  contracts: {
+    terms: 'https://store.test/terms',
+    personalData: 'https://store.test/personal-data',
+  },
+  installments: { default: 1, max: 12 },
+}
+
+const buildTransaction = (
+  overrides: Partial<TransactionView> = {},
+): TransactionView => ({
+  id: 'tx-1',
+  reference: 'REF-1',
+  status: 'PENDING',
+  quantity: 2,
+  amounts: {
+    productAmountInCents: 7000000,
+    baseFeeInCents: 500000,
+    deliveryFeeInCents: 1200000,
+    totalInCents: 8700000,
+  },
+  card: null,
+  product: { id: PRODUCT_ID, name: 'Wireless Mouse', quantity: 2 },
+  delivery: null,
+  failureReason: null,
+  ...overrides,
+})
+
+const DELIVERY = {
+  fullName: 'Test Buyer',
+  email: 'buyer@example.com',
+  phone: '+57 300 000 0000',
+  address: 'Calle 1 #2-3',
+  city: 'Bogotá',
+  region: 'Cundinamarca',
+}
+
+const makeConfigStore = () =>
+  configureStore({ reducer: { checkoutConfig: checkoutConfigReducer } })
+
+describe('loadCheckoutConfig thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  it('loads the config once and stores it', async () => {
+    mockedHttpRequest.mockResolvedValue(CONFIG)
+    const store = makeConfigStore()
+
+    await store.dispatch(loadCheckoutConfig()).unwrap()
+
+    expect(mockedHttpRequest).toHaveBeenCalledWith('/payments/checkout-config')
+    expect(store.getState().checkoutConfig.config).toEqual(CONFIG)
+    expect(store.getState().checkoutConfig.status).toBe('success')
+    expect(store.getState().checkoutConfig.error).toBeNull()
+  })
+
+  it('surfaces a 503 as providerUnavailable with a retryable status', async () => {
+    mockedHttpRequest.mockResolvedValue(createApiError('providerUnavailable'))
+    const store = makeConfigStore()
+
+    const error = await store.dispatch(loadCheckoutConfig()).unwrap().catch((e) => e)
+
+    expect(error.kind).toBe('providerUnavailable')
+    expect(store.getState().checkoutConfig.status).toBe('error')
+    expect(store.getState().checkoutConfig.error?.kind).toBe('providerUnavailable')
+    expect(store.getState().checkoutConfig.config).toBeNull()
+  })
+})
+
+describe('createTransaction thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  const args = {
+    idempotencyKey: 'key-1234567890abcdef',
+    productId: PRODUCT_ID,
+    quantity: 2,
+    delivery: DELIVERY,
+  }
+
+  it('POSTs the purchase without any amount field and returns the view', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction())
+    const store = makeConfigStore()
+
+    const view = await store.dispatch(createTransaction(args)).unwrap()
+
+    expect(view.id).toBe('tx-1')
+    expect(mockedHttpRequest).toHaveBeenCalledWith('/transactions', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': args.idempotencyKey },
+      body: {
+        productId: PRODUCT_ID,
+        quantity: 2,
+        customer: {
+          fullName: DELIVERY.fullName,
+          email: DELIVERY.email,
+          phone: DELIVERY.phone,
+        },
+        delivery: {
+          address: DELIVERY.address,
+          city: DELIVERY.city,
+          region: DELIVERY.region,
+        },
+      },
+    })
+
+    const body = (mockedHttpRequest.mock.calls[0][1] as { body: Record<string, unknown> }).body
+    expect(Object.keys(body)).toEqual(['productId', 'quantity', 'customer', 'delivery'])
+    expect(JSON.stringify(body)).not.toMatch(/amount/i)
+  })
+
+  it('treats a 200 idempotent replay like a 201 creation', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction({ status: 'PENDING' }))
+    const store = makeConfigStore()
+
+    await expect(store.dispatch(createTransaction(args)).unwrap()).resolves.toMatchObject({
+      id: 'tx-1',
+    })
+  })
+
+  it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict'] as const)(
+    'rejects with %s',
+    async (kind) => {
+      mockedHttpRequest.mockResolvedValue(createApiError(kind))
+      const store = makeConfigStore()
+
+      const error = await store.dispatch(createTransaction(args)).unwrap().catch((e) => e)
+
+      expect(error.kind).toBe(kind)
+    },
+  )
+})
+
+describe('payTransaction thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  const args = {
+    transactionId: 'tx-1',
+    cardToken: 'tok_single_use',
+    installments: 3,
+  }
+
+  it('sends the token argument and accepted contracts, never reading it from state', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction())
+    const store = makeStore(startedCheckout())
+
+    await store.dispatch(payTransaction(args)).unwrap()
+
+    expect(mockedHttpRequest).toHaveBeenCalledWith('/transactions/tx-1/payment', {
+      method: 'POST',
+      body: {
+        cardToken: 'tok_single_use',
+        installments: 3,
+        acceptedContracts: true,
+      },
+    })
+    expect(JSON.stringify(store.getState().checkout)).not.toContain('tok_single_use')
+  })
+
+  it('handles a 202 with the PENDING view', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction({ status: 'PENDING' }))
+    const store = makeStore(startedCheckout())
+
+    const view = await store.dispatch(payTransaction(args)).unwrap()
+
+    expect(view.status).toBe('PENDING')
+  })
+
+  it.each([
+    'notPayable',
+    'contractsNotAccepted',
+    'invalidToken',
+    'providerRejected',
+    'providerUnavailable',
+    'network',
+  ] as const)('rejects with %s so the caller can act on the token', async (kind) => {
+    mockedHttpRequest.mockResolvedValue(createApiError(kind))
+    const store = makeStore(startedCheckout())
+
+    const error = await store.dispatch(payTransaction(args)).unwrap().catch((e) => e)
+
+    expect(error.kind).toBe(kind)
+  })
+
+  it('re-calls payTransaction with the same token after a transient failure, with no new purchase', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('providerUnavailable'))
+      .mockResolvedValueOnce(buildTransaction())
+    const store = makeStore(startedCheckout())
+
+    await store.dispatch(payTransaction(args)).unwrap().catch(() => undefined)
+    await store.dispatch(payTransaction(args)).unwrap()
+
+    const paymentCalls = mockedHttpRequest.mock.calls.filter(
+      ([path]) => path === '/transactions/tx-1/payment',
+    )
+    expect(paymentCalls).toHaveLength(2)
+    for (const [, options] of paymentCalls) {
+      expect((options as { body: { cardToken: string } }).body.cardToken).toBe('tok_single_use')
+    }
+    expect(mockedHttpRequest.mock.calls.some(([path]) => path === '/transactions')).toBe(false)
   })
 })
