@@ -60,7 +60,6 @@ Extends the 003 state. New fields are non-sensitive.
 | `idempotencyKey` | string \| null | 16–64 `[A-Za-z0-9_-]`; **new**; persisted (version 2) |
 | `cardBrand` | string \| null | non-sensitive; in-memory only (not persisted) |
 | `cardLastFour` | string \| null | non-sensitive; in-memory only |
-| `cardToken` | string \| null | single-use token produced at **Continuar**; **in-memory only, never persisted**; **kept** across a `network`/timeout/`503` at Pagar (the retry re-sends the same token with the same key; the back-end reconciles the pending claim by reference); **discarded** on payment `202`/`200`, on `422 invalidToken`, on any `409`, on modal close, and on any final state |
 | `installments` | integer | default 1; in-memory only |
 | `contractsAccepted` | boolean | both contracts ticked; in-memory only |
 | `paymentStatus` | `'idle' \| 'creating' \| 'paying' \| 'pending' \| 'approved' \| 'declined' \| 'voided' \| 'error'` | in-memory lifecycle |
@@ -70,10 +69,13 @@ There is still **no** card number, CVC or expiry field. `DeliveryData` stays: `f
 `address`, `city`, `region`, `notes?`, validated to the **same rules as the back-end DTO**
 (`back-end/src/infrastructure/http/create-transaction.dto.ts`, sourced from `customer.rules.ts` and
 `delivery.rules.ts`): `fullName` required and ≤ 120, `email` matches `EMAIL_PATTERN`, `phone` matches
-`PHONE_PATTERN` (7–20 of digits/`+`/space), `address`/`city`/`region` required, `notes` optional and ≤ 500; the
-front-end copies the constants `FULL_NAME_MAX_LENGTH`, `EMAIL_PATTERN`, `PHONE_PATTERN` and `NOTES_MAX_LENGTH`
-into `shared/constants.ts` so both sides cannot drift. `cardToken` is the one new field that must **never** be
-persisted: it is excluded from `StorableCheckout`/the persisted document and from `toStorableCheckout`.
+`PHONE_PATTERN` (`/^[0-9+ ]{7,20}$/` — 7–20 chars of digits, `+` and space only, **not** a plain length check),
+`address`/`city`/`region` required, `notes` optional and ≤ 500; the front-end copies the constants
+`FULL_NAME_MAX_LENGTH`, `EMAIL_PATTERN`, `PHONE_PATTERN` and `NOTES_MAX_LENGTH` into `shared/constants.ts` so both
+sides cannot drift. **`cardToken` is not a `CheckoutState` field**: the single-use token lives in local
+`CheckoutModal` component state (memory only, never dispatched to Redux, never persisted) and is passed as an
+argument to the `payTransaction` thunk when Pagar is pressed; it is excluded from `StorableCheckout`/the
+persisted document and from `toStorableCheckout`.
 
 ## Local (non-Redux, non-persisted) state: card form
 
@@ -88,6 +90,18 @@ never serialized, never logged.
 | `cardholder` | string | ≥ 5 characters |
 | `installments` | integer | ≥ 1 and ≤ `installments.max` |
 | `termsAccepted` / `personalDataAccepted` | boolean | both required to pay |
+
+## Local (non-Redux, non-persisted) state: single-use token
+
+The `cardToken` produced at **Continuar** is held in local `CheckoutModal` component state (a `useState`/`useRef`),
+never dispatched to Redux and never serialized. It is passed as an argument to the `payTransaction` thunk when
+**Pagar** is pressed. Its lifecycle is unchanged: **kept** across a `network`/timeout/`503` at Pagar (the retry
+re-sends the same token with the same key; the back-end reconciles the pending claim by reference) and
+**discarded** on payment `202`/`200`, on `422 invalidToken`, on any `409`, on modal close and on any final state.
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `cardToken` | string \| null | single-use token; local to `CheckoutModal`; never in Redux, never persisted |
 
 ## State entity: CheckoutConfigState (`features/checkout`)
 
@@ -172,7 +186,8 @@ cancelled on unmount).
   `PENDING` (network failure, 503, `invalidToken`, replay); on `DECLINED`/`VOIDED`/`ERROR` (incl.
   `RESERVATION_EXPIRED`) `transactionId` is cleared and a new key is generated.
 - Delivery fields validated (flat form → nested payload `{ customer: { fullName, email, phone }, delivery:
-  { address, city, region, notes? } }`) with the limits in the state table above, before continuing.
+  { address, city, region, notes? } }`) with the back-end rules above (`phone` must match `PHONE_PATTERN`, not a
+  plain length check) before continuing.
 - Card fields validated per the table above; installments within `1..installments.max`.
 - Both contracts required; otherwise `contractsNotAccepted` blocks before any request (no tokenization, no
   transaction created).

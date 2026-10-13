@@ -157,9 +157,10 @@ message, never double-charges and never trusts a client-supplied amount.
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST collect the delivery details (full name up to 120 characters, email, phone of 7–20
-  characters, address, city, region and optional notes up to 500 characters) and validate them (required fields
-  and email shape) before payment.
+- **FR-001**: The system MUST collect the delivery details (full name up to 120 characters, email, phone matching
+  the back-end `PHONE_PATTERN` `/^[0-9+ ]{7,20}$/` — 7–20 characters of digits, `+` and space only — address,
+  city, region and optional notes up to 500 characters) and validate them (required fields, email shape and phone
+  pattern) before continuing.
 - **FR-002**: The system MUST collect the card details (number, expiry, CVC, cardholder name and installments)
   in the application's own form and MUST NOT use a provider-hosted widget or hosted checkout page.
 - **FR-003**: The system MUST validate the card number (Luhn and length), a not-expired expiry, a valid CVC, a

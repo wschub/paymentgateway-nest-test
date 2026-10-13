@@ -63,8 +63,9 @@ The SPA consumes the **existing** back-end endpoints from feature 002. It sends 
 ## Flow order
 
 - `POST /transactions` is called by **Continuar** (creates the `PENDING` purchase); `POST /transactions/:id/payment`
-  is called later by **Pagar** with the single-use token held in memory. A refresh between the two re-enters the
-  card and replays `POST /transactions` with the same key (same `id`/`reference`). When Pagar fails with
+  is called later by **Pagar**, which passes the single-use token held in local `CheckoutModal` state (memory,
+  never Redux, never persisted) as an argument to the `payTransaction` thunk. A refresh between the two re-enters
+  the card and replays `POST /transactions` with the same key (same `id`/`reference`). When Pagar fails with
   `network`/timeout/`503`, the token is **kept** and the retry re-sends the same token with the same key (no new
   `POST /transactions`); on any other response (`202`/`200`, `invalidToken`, any `409`, modal close, final state)
   the token is **discarded**.
