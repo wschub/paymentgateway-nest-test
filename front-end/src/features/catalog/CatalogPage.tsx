@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { fetchCatalog } from '@/features/catalog/catalog.slice'
 import {
@@ -10,7 +10,9 @@ import { ProductCard } from '@/features/catalog/ProductCard'
 import { Spinner } from '@/shared/ui/Spinner'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
+import { LiveRegion } from '@/shared/ui/LiveRegion'
 import { STORE_NAME } from '@/shared/constants'
+import type { Product } from '@/shared/product'
 
 const PRIORITY_IMAGE_COUNT = 3
 
@@ -20,9 +22,40 @@ export function CatalogPage() {
   const status = useAppSelector(selectCatalogStatus)
   const error = useAppSelector(selectCatalogError)
 
+  const [notice, setNotice] = useState('')
+  const previousItemsRef = useRef<Product[] | null>(null)
+
   useEffect(() => {
     void dispatch(fetchCatalog())
   }, [dispatch])
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void dispatch(fetchCatalog())
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [dispatch])
+
+  useEffect(() => {
+    if (status !== 'success') {
+      return
+    }
+    const previous = previousItemsRef.current
+    previousItemsRef.current = items
+    if (previous === null) {
+      return
+    }
+    const changed = items.some((item) => {
+      const before = previous.find((entry) => entry.id === item.id)
+      return before !== undefined && before.stock !== item.stock
+    })
+    setNotice(changed ? 'Disponibilidad del catálogo actualizada.' : '')
+  }, [items, status])
 
   useEffect(() => {
     document.title = `Catálogo — ${STORE_NAME}`
@@ -33,6 +66,8 @@ export function CatalogPage() {
       <h1 tabIndex={-1} className="text-2xl font-bold text-gray-900">
         Catálogo
       </h1>
+
+      <LiveRegion message={notice} />
 
       {status === 'loading' || status === 'idle' ? <Spinner /> : null}
 

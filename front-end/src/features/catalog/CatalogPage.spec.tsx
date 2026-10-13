@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router-dom'
@@ -65,6 +65,16 @@ function renderPage() {
   return store
 }
 
+function setVisibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  })
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+}
+
 describe('CatalogPage', () => {
   beforeEach(() => {
     mockedHttpRequest.mockReset()
@@ -91,7 +101,9 @@ describe('CatalogPage', () => {
     mockedHttpRequest.mockImplementation(() => new Promise(() => {}))
     renderPage()
 
-    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(
+      screen.getByRole('status', { name: 'Cargando…' }),
+    ).toBeInTheDocument()
   })
 
   it('shows an empty state when the catalog is empty', async () => {
@@ -168,5 +180,56 @@ describe('CatalogPage', () => {
 
     await screen.findByText('Mouse')
     expect(document.title).toBe('Catálogo — Tech Store')
+  })
+
+  it('re-reads the catalog when the tab becomes visible and skips hidden changes', async () => {
+    mockedHttpRequest.mockResolvedValue(products)
+    renderPage()
+    await screen.findByText('Mouse')
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+
+    setVisibility('hidden')
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+
+    mockedHttpRequest.mockResolvedValue([
+      { ...products[0], stock: 2 },
+      ...products.slice(1),
+    ])
+    setVisibility('visible')
+
+    await waitFor(() => expect(mockedHttpRequest).toHaveBeenCalledTimes(2))
+  })
+
+  it('announces an availability change in a polite live region after a re-read', async () => {
+    mockedHttpRequest.mockResolvedValueOnce(products)
+    renderPage()
+    await screen.findByText('Mouse')
+
+    mockedHttpRequest.mockResolvedValueOnce([
+      { ...products[0], stock: 2 },
+      ...products.slice(1),
+    ])
+    setVisibility('visible')
+
+    const announcement = await screen.findByText(
+      /disponibilidad del catálogo actualizada/i,
+    )
+    expect(announcement.closest('[aria-live]')).toHaveAttribute(
+      'aria-live',
+      'polite',
+    )
+  })
+
+  it('exposes a focusable heading and alt text on every product image', async () => {
+    mockedHttpRequest.mockResolvedValue(products)
+    renderPage()
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Catálogo',
+      level: 1,
+    })
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('img', { name: 'Mouse' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Keyboard' })).toBeInTheDocument()
   })
 })
