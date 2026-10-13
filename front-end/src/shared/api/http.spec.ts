@@ -174,4 +174,123 @@ describe('httpRequest', () => {
       expect(isApiError({ kind: 'server' })).toBe(false)
     })
   })
+
+  describe('request logging', () => {
+    let debugSpy: jest.SpyInstance
+
+    beforeEach(() => {
+      debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      debugSpy.mockRestore()
+    })
+
+    it('does not log when the build is not development', async () => {
+      const { httpRequest } = load()
+      fetchMock.mockResolvedValue(makeResponse({ status: 500 }))
+
+      await httpRequest('/products')
+
+      expect(debugSpy).not.toHaveBeenCalled()
+    })
+
+    describe('in a development build', () => {
+      beforeEach(() => {
+        jest.doMock('@/config', () => ({
+          API_URL: 'https://api.test',
+          IS_DEV: true,
+        }))
+      })
+
+      it('logs exactly one line with kind, status and path on an HTTP failure', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockResolvedValue(makeResponse({ status: 500 }))
+
+        await httpRequest('/products')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        expect(debugSpy.mock.calls[0][0]).toBe(
+          'api request failed kind=server status=500 path=/products',
+        )
+      })
+
+      it('logs the mapped kind together with its HTTP status', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockResolvedValue(makeResponse({ status: 404 }))
+
+        await httpRequest('/products/missing')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        expect(debugSpy.mock.calls[0][0]).toBe(
+          'api request failed kind=notFound status=404 path=/products/missing',
+        )
+      })
+
+      it('omits the status when there is no HTTP response', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+        await httpRequest('/products')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        expect(debugSpy.mock.calls[0][0]).toBe(
+          'api request failed kind=network path=/products',
+        )
+      })
+
+      it('logs one line when no base URL is configured', async () => {
+        jest.doMock('@/config', () => ({ API_URL: '', IS_DEV: true }))
+        const { httpRequest } = load()
+
+        await httpRequest('/products')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        expect(debugSpy.mock.calls[0][0]).toBe(
+          'api request failed kind=server path=/products',
+        )
+      })
+
+      it('logs a malformed success response with its HTTP status', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockResolvedValue(
+          makeResponse({ status: 200, body: '<html>boom</html>' }),
+        )
+
+        await httpRequest('/products')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        expect(debugSpy.mock.calls[0][0]).toBe(
+          'api request failed kind=server status=200 path=/products',
+        )
+      })
+
+      it('never logs bodies, headers or query values', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockResolvedValue(
+          makeResponse({ status: 500, body: 'SECRET_BODY_DETAIL' }),
+        )
+
+        await httpRequest('/products?token=SECRET_QUERY_VALUE')
+
+        expect(debugSpy).toHaveBeenCalledTimes(1)
+        const line = String(debugSpy.mock.calls[0][0])
+        expect(line).not.toContain('SECRET_BODY_DETAIL')
+        expect(line).not.toContain('SECRET_QUERY_VALUE')
+        expect(line).not.toContain('https://api.test')
+        expect(line).toBe(
+          'api request failed kind=server status=500 path=/products',
+        )
+      })
+
+      it('does not log anything for a successful request', async () => {
+        const { httpRequest } = load()
+        fetchMock.mockResolvedValue(makeResponse({ body: '[]' }))
+
+        await httpRequest('/products')
+
+        expect(debugSpy).not.toHaveBeenCalled()
+      })
+    })
+  })
 })
