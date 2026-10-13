@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import productReducer, {
   fetchProduct,
+  productOpened,
   quantityChanged,
 } from '@/features/product/product.slice'
 import { httpRequest } from '@/shared/api/http'
@@ -103,6 +104,18 @@ describe('product slice', () => {
     store.dispatch(quantityChanged(50))
     expect(store.getState().product.quantity).toBe(1)
     expect(store.getState().product.product).toBeNull()
+  })
+
+  it('resets the quantity to one when another product page is opened', async () => {
+    mockedHttpRequest.mockResolvedValue(buildProduct(5))
+    const store = makeStore()
+    await store.dispatch(fetchProduct('a'))
+
+    store.dispatch(quantityChanged(3))
+    expect(store.getState().product.quantity).toBe(3)
+
+    store.dispatch(productOpened())
+    expect(store.getState().product.quantity).toBe(1)
   })
 
   it('clamps quantity down on a re-read when fresh stock shrinks', async () => {

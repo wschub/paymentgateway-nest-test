@@ -40,6 +40,9 @@ const productSlice = createSlice({
   name: 'product',
   initialState,
   reducers: {
+    productOpened(state) {
+      state.quantity = 1
+    },
     quantityChanged(state, action: PayloadAction<number>) {
       if (!state.product) {
         return
@@ -74,6 +77,6 @@ const productSlice = createSlice({
   },
 })
 
-export const { quantityChanged } = productSlice.actions
+export const { quantityChanged, productOpened } = productSlice.actions
 
 export default productSlice.reducer
