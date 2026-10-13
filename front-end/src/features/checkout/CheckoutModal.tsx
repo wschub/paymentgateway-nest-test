@@ -6,22 +6,29 @@ import {
   selectCheckoutConfigStatus,
   selectCheckoutStep,
   selectIdempotencyKey,
+  selectPaymentError,
+  selectPaymentStatus,
   selectPurchaseQuantity,
   selectSelectedProductId,
+  selectTransaction,
+  selectTransactionId,
 } from '@/features/checkout/checkout.selectors'
 import {
   checkoutStepChanged,
+  transactionReceived,
 } from '@/features/checkout/checkout.slice'
 import {
   loadCheckoutConfig,
   payTransaction,
+  readTransactionStatus,
 } from '@/features/checkout/checkout.thunks'
-import type { TransactionView } from '@/features/checkout/checkout.types'
 import {
   CardAndDeliveryForm,
   type CardAndDeliveryFormResult,
 } from '@/features/checkout/CardAndDeliveryForm'
 import { OrderSummary } from '@/features/checkout/OrderSummary'
+import { PaymentStatus } from '@/features/checkout/PaymentStatus'
+import { usePaymentPolling } from '@/features/checkout/usePaymentPolling'
 import { Spinner } from '@/shared/ui/Spinner'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { isApiError } from '@/shared/api/http'
@@ -54,12 +61,17 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
   const productId = useAppSelector(selectSelectedProductId)
   const quantity = useAppSelector(selectPurchaseQuantity)
   const idempotencyKey = useAppSelector(selectIdempotencyKey)
+  const transaction = useAppSelector(selectTransaction)
+  const transactionId = useAppSelector(selectTransactionId)
+  const paymentStatus = useAppSelector(selectPaymentStatus)
+  const paymentError = useAppSelector(selectPaymentError)
 
   const [cardToken, setCardToken] = useState<string | null>(null)
-  const [created, setCreated] = useState<TransactionView | null>(null)
   const [createdInstallments, setCreatedInstallments] = useState(1)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<ApiError | null>(null)
+
+  usePaymentPolling()
 
   const usableConfig =
     config && config.contracts && config.installments ? config : null
@@ -75,6 +87,12 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
       dispatch(checkoutStepChanged('cardAndDelivery'))
     }
   }, [open, step, cardToken, dispatch])
+
+  useEffect(() => {
+    if (open && step === 'finalStatus' && transactionId && !transaction) {
+      void dispatch(readTransactionStatus(transactionId))
+    }
+  }, [open, step, transactionId, transaction, dispatch])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -94,7 +112,6 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
 
   const close = () => {
     setCardToken(null)
-    setCreated(null)
     setCreatedInstallments(1)
     setPayError(null)
     setPaying(false)
@@ -103,20 +120,20 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
 
   const handleCreated = (result: CardAndDeliveryFormResult) => {
     setCardToken(result.cardToken)
-    setCreated(result.transaction)
     setCreatedInstallments(result.installments)
     setPayError(null)
+    dispatch(transactionReceived(result.transaction))
     dispatch(checkoutStepChanged('summary'))
   }
 
   const handlePay = async () => {
-    if (paying || !created || !cardToken) return
+    if (paying || !transaction || !cardToken) return
     setPaying(true)
     setPayError(null)
 
     const outcome = await dispatch(
       payTransaction({
-        transactionId: created.id,
+        transactionId: transaction.id,
         cardToken,
         installments: createdInstallments,
       }),
@@ -134,10 +151,17 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
       }
     } else {
       setCardToken(null)
-      setCreated(outcome)
+      dispatch(transactionReceived(outcome))
       dispatch(checkoutStepChanged('finalStatus'))
     }
     setPaying(false)
+  }
+
+  const recheckPayment = () => {
+    setPayError(null)
+    if (transactionId) {
+      void dispatch(readTransactionStatus(transactionId))
+    }
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
@@ -164,6 +188,28 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
         : STEP_TITLES.cardAndDelivery
 
   const renderBody = () => {
+    if (step === 'finalStatus') {
+      return (
+        <PaymentStatus
+          transaction={transaction}
+          status={paymentStatus}
+          error={payError ?? paymentError}
+          onRecheck={recheckPayment}
+        />
+      )
+    }
+    if (step === 'summary' && transaction) {
+      return (
+        <OrderSummary
+          transaction={transaction}
+          paying={paying}
+          error={payError}
+          onPay={() => {
+            void handlePay()
+          }}
+        />
+      )
+    }
     if (configStatus === 'idle' || (configStatus === 'loading' && !usableConfig)) {
       return <Spinner label="Cargando la configuración de pago…" />
     }
@@ -178,25 +224,6 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
             void dispatch(loadCheckoutConfig())
           }}
         />
-      )
-    }
-    if (step === 'summary' && created) {
-      return (
-        <OrderSummary
-          transaction={created}
-          paying={paying}
-          error={payError}
-          onPay={() => {
-            void handlePay()
-          }}
-        />
-      )
-    }
-    if (step === 'finalStatus') {
-      return (
-        <p role="status" className="text-base text-gray-700">
-          Procesando el pago…
-        </p>
       )
     }
     if (productId) {

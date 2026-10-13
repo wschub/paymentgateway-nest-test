@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { CheckoutModal } from '@/features/checkout/CheckoutModal'
@@ -7,6 +7,7 @@ import type { CardAndDeliveryFormProps } from '@/features/checkout/CardAndDelive
 import type { OrderSummaryProps } from '@/features/checkout/OrderSummary'
 import type { CheckoutConfig } from '@/features/checkout/checkout.types'
 import { makeStore, type AppStore, type RootState } from '@/app/store'
+import type { CheckoutState } from '@/features/checkout/checkout.slice'
 import { httpRequest } from '@/shared/api/http'
 import { createApiError } from '@/shared/api/api.errors'
 
@@ -101,8 +102,8 @@ const CONFIG: CheckoutConfig = {
 const TRANSACTION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const PRODUCT_ID = 'p1'
 
-const preloadedCheckout = {
-  currentStep: 'cardAndDelivery' as const,
+const preloadedCheckout: CheckoutState = {
+  currentStep: 'cardAndDelivery',
   selectedProductId: PRODUCT_ID,
   quantity: 2,
   delivery: null,
@@ -112,23 +113,26 @@ const preloadedCheckout = {
   cardLastFour: null,
   installments: 1,
   contractsAccepted: false,
-  paymentStatus: 'idle' as const,
+  paymentStatus: 'idle',
   paymentError: null,
 }
 
-function renderModal(): { store: AppStore; onClose: jest.Mock } {
+function renderModal(
+  checkoutOverrides: Partial<typeof preloadedCheckout> = {},
+): { store: AppStore; onClose: jest.Mock; rerenderOpen: (open: boolean) => void } {
   const onClose = jest.fn()
   const store = makeStore({
-    checkout: preloadedCheckout,
+    checkout: { ...preloadedCheckout, ...checkoutOverrides },
     checkoutConfig: { config: null, status: 'idle', error: null },
   } as Partial<RootState>)
-  const element: ReactElement = (
+  const element = (open: boolean): ReactElement => (
     <Provider store={store}>
-      <CheckoutModal open onClose={onClose} />
+      <CheckoutModal open={open} onClose={onClose} />
     </Provider>
   )
-  render(element)
-  return { store, onClose }
+  const { rerender } = render(element(true))
+  const rerenderOpen = (open: boolean) => rerender(element(open))
+  return { store, onClose, rerenderOpen }
 }
 
 const successRoutes = (paymentOutcome: unknown) => {
@@ -293,5 +297,170 @@ describe('CheckoutModal', () => {
     await user.click(screen.getByRole('button', { name: 'Cerrar' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the native dialog when the open prop becomes false', async () => {
+    successRoutes(paidTransaction)
+    const { rerenderOpen } = renderModal()
+
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    const dialog = document.querySelector('dialog') as HTMLDialogElement
+    expect(dialog.open).toBe(true)
+
+    rerenderOpen(false)
+
+    expect(dialog.open).toBe(false)
+  })
+
+  it('re-reads the transaction when the user asks to verify again', async () => {
+    const user = userEvent.setup()
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      return Promise.resolve({ ...paidTransaction, status: 'PENDING' })
+    })
+    renderModal({
+      currentStep: 'finalStatus',
+      transactionId: TRANSACTION_ID,
+      paymentStatus: 'pending',
+    })
+
+    await screen.findByRole('button', { name: 'Volver a verificar' })
+    await user.click(screen.getByRole('button', { name: 'Volver a verificar' }))
+
+    await waitFor(() =>
+      expect(
+        mockedHttpRequest.mock.calls.filter(
+          ([path]) => path === `/transactions/${TRANSACTION_ID}`,
+        ).length,
+      ).toBeGreaterThanOrEqual(2),
+    )
+  })
+
+  it('traps keyboard focus inside the dialog while it is open', async () => {
+    successRoutes(paidTransaction)
+    renderModal()
+
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    const dialog = document.querySelector('dialog') as HTMLDialogElement
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+
+    first.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+
+    last.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+  })
+
+  it('ignores keys other than Tab when trapping focus', async () => {
+    successRoutes(paidTransaction)
+    renderModal()
+
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    const dialog = document.querySelector('dialog') as HTMLDialogElement
+    const first = dialog.querySelector('button') as HTMLButtonElement
+    first.focus()
+
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' })
+
+    expect(document.activeElement).toBe(first)
+  })
+
+  it('does not read a transaction when re-checking without a transaction id', async () => {
+    const user = userEvent.setup()
+    successRoutes(paidTransaction)
+    renderModal({
+      currentStep: 'finalStatus',
+      transactionId: null,
+      paymentStatus: 'pending',
+    })
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Volver a verificar' }),
+    )
+
+    expect(
+      mockedHttpRequest.mock.calls.some(([path]) =>
+        /^\/transactions\/.+/.test(String(path)),
+      ),
+    ).toBe(false)
+  })
+
+  it('renders nothing when no product is selected', async () => {
+    successRoutes(paidTransaction)
+    renderModal({ selectedProductId: null })
+
+    await screen.findByRole('heading', { name: 'Datos de pago y entrega' })
+
+    expect(
+      screen.queryByRole('button', { name: 'Continuar (simulado)' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('closes when the dialog fires a cancel event', async () => {
+    successRoutes(paidTransaction)
+    const { onClose } = renderModal()
+
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    const dialog = document.querySelector('dialog') as HTMLDialogElement
+    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a verifying state after a refresh and only reveals the result once the read settles', async () => {
+    let resolveRead: (value: unknown) => void = () => undefined
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      return new Promise((resolve) => {
+        resolveRead = resolve
+      })
+    })
+    renderModal({
+      currentStep: 'finalStatus',
+      transactionId: TRANSACTION_ID,
+      paymentStatus: 'pending',
+    })
+
+    expect(await screen.findByText('Verificando el pago…')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: '¡Pago aprobado!' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Pago rechazado' }),
+    ).not.toBeInTheDocument()
+
+    expect(mockedHttpRequest).toHaveBeenCalledWith(
+      `/transactions/${TRANSACTION_ID}`,
+      { map400ToNotFound: true },
+    )
+
+    await act(async () => {
+      resolveRead(paidTransaction)
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: '¡Pago aprobado!' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Verificando el pago…')).not.toBeInTheDocument()
+  })
+
+  it('returns to card entry with the same key when refreshed on the summary step', async () => {
+    successRoutes(paidTransaction)
+    renderModal({
+      currentStep: 'summary',
+      transactionId: TRANSACTION_ID,
+      idempotencyKey: 'key-123',
+    })
+
+    expect(
+      await screen.findByRole('button', { name: 'Continuar (simulado)' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('form-idempotency-key')).toHaveTextContent('key-123')
   })
 })
