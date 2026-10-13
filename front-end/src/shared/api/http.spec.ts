@@ -72,10 +72,10 @@ describe('httpRequest', () => {
     expect(((await httpRequest('/products')) as ApiError).kind).toBe('server')
   })
 
-  it('maps 400 to server by default', async () => {
+  it('maps 400 to badRequest by default', async () => {
     const { httpRequest } = load()
     fetchMock.mockResolvedValue(makeResponse({ status: 400 }))
-    expect(((await httpRequest('/products')) as ApiError).kind).toBe('server')
+    expect(((await httpRequest('/products')) as ApiError).kind).toBe('badRequest')
   })
 
   it('maps 400 to notFound only when the caller opts in for the product route', async () => {
@@ -85,6 +85,78 @@ describe('httpRequest', () => {
       map400ToNotFound: true,
     })) as ApiError
     expect(result.kind).toBe('notFound')
+  })
+
+  it.each([
+    [404, undefined, 'notFound'],
+    [429, undefined, 'rateLimited'],
+    [400, undefined, 'badRequest'],
+    [409, 'INSUFFICIENT_STOCK', 'soldOut'],
+    [409, 'IDEMPOTENCY_KEY_REUSED', 'idempotencyConflict'],
+    [409, 'TRANSACTION_NOT_PAYABLE', 'notPayable'],
+    [422, 'CONTRACTS_NOT_ACCEPTED', 'contractsNotAccepted'],
+    [422, 'INVALID_PAYMENT_TOKEN', 'invalidToken'],
+    [502, 'PAYMENT_PROVIDER_REJECTED', 'providerRejected'],
+    [503, 'PAYMENT_PROVIDER_UNAVAILABLE', 'providerUnavailable'],
+    [500, undefined, 'server'],
+    [418, undefined, 'server'],
+  ])(
+    'maps status %i with code %s to kind "%s"',
+    async (status, code, kind) => {
+      const { httpRequest } = load()
+      fetchMock.mockResolvedValue(
+        makeResponse({
+          status,
+          body: code === undefined ? '{}' : JSON.stringify({ code }),
+        }),
+      )
+
+      expect(((await httpRequest('/transactions')) as ApiError).kind).toBe(kind)
+    },
+  )
+
+  it('falls back to server for an unmapped error code', async () => {
+    const { httpRequest } = load()
+    fetchMock.mockResolvedValue(
+      makeResponse({ status: 409, body: JSON.stringify({ code: 'OTHER' }) }),
+    )
+    expect(((await httpRequest('/transactions')) as ApiError).kind).toBe('server')
+  })
+
+  it('sends a POST with a JSON body and custom headers', async () => {
+    const { httpRequest } = load()
+    fetchMock.mockResolvedValue(
+      makeResponse({ status: 201, body: JSON.stringify({ id: 'tx-1' }) }),
+    )
+
+    const result = await httpRequest('/transactions', {
+      method: 'POST',
+      body: { productId: 'p1', quantity: 2 },
+      headers: { 'Idempotency-Key': 'Abcdefghijklmnop1234' },
+    })
+
+    expect(result).toEqual({ id: 'tx-1' })
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.test/transactions')
+    expect(init.method).toBe('POST')
+    expect(init.headers).toMatchObject({
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'Abcdefghijklmnop1234',
+    })
+    expect(init.body).toBe(JSON.stringify({ productId: 'p1', quantity: 2 }))
+  })
+
+  it('defaults to GET without a body or Content-Type', async () => {
+    const { httpRequest } = load()
+    fetchMock.mockResolvedValue(makeResponse({ body: '[]' }))
+
+    await httpRequest('/products')
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.method).toBe('GET')
+    expect(init.body).toBeUndefined()
+    expect(init.headers).not.toHaveProperty('Content-Type')
   })
 
   it('treats invalid JSON as a server error', async () => {
