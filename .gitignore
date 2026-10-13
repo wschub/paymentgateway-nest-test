@@ -14,3 +14,4 @@ commands.txt*.tsbuildinfo
 commands.txt
 temp.txt
 HANDOFF.md
+prod-smoke.sh
