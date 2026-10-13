@@ -19,10 +19,30 @@ describe('Image', () => {
     expect(img).toHaveAttribute('width', '300')
     expect(img).toHaveAttribute('height', '200')
     expect(img).toHaveAttribute('loading', 'lazy')
+    expect(img.getAttribute('fetchpriority')).toBe('auto')
     expect(img).toHaveAttribute('decoding', 'async')
     expect(img.className).toContain('w-full')
     expect(img.className).toContain('h-auto')
     expect(img).toHaveAttribute('src', '/images/products/mouse.webp')
+  })
+
+  it('loads above-the-fold images eagerly with high fetch priority', () => {
+    render(
+      <Image
+        src="/images/products/mouse.webp"
+        alt="Wireless Mouse"
+        width={300}
+        height={200}
+        priority
+      />,
+    )
+
+    const img = screen.getByRole('img', {
+      name: 'Wireless Mouse',
+    }) as HTMLImageElement
+
+    expect(img).toHaveAttribute('loading', 'eager')
+    expect(img.getAttribute('fetchpriority')).toBe('high')
   })
 
   it('swaps to the local fallback exactly once when the source fails', () => {

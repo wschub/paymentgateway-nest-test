@@ -8,6 +8,7 @@ export interface ImageProps
   alt: string
   width: number
   height: number
+  priority?: boolean
 }
 
 export function Image({
@@ -16,6 +17,7 @@ export function Image({
   width,
   height,
   className,
+  priority = false,
   ...rest
 }: ImageProps) {
   const [trackedSrc, setTrackedSrc] = useState(src)
@@ -34,7 +36,8 @@ export function Image({
       alt={alt}
       width={width}
       height={height}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       className={classes}
       onError={() => {
