@@ -59,6 +59,23 @@ const startedCheckout = (): CheckoutState => ({
   paymentError: null,
 })
 
+const DELIVERY_RESTORED = {
+  fullName: 'Test Buyer',
+  email: 'buyer@example.com',
+  phone: '+57 300 000 0000',
+  address: 'Calle 1 #2-3',
+  city: 'Bogotá',
+  region: 'Cundinamarca',
+}
+
+const fullyStartedCheckout = (): CheckoutState => ({
+  ...startedCheckout(),
+  currentStep: 'summary',
+  delivery: DELIVERY_RESTORED,
+  transactionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  idempotencyKey: 'key-1234567890abcdef',
+})
+
 const makeStore = (checkout: CheckoutState) =>
   configureStore({
     reducer: { checkout: checkoutReducer, product: productReducer },
@@ -119,17 +136,39 @@ describe('restoreProgress thunk', () => {
     expect(store.getState().checkout.quantity).toBe(1)
   })
 
-  it.each(['rateLimited', 'network', 'server'] as const)(
+  it('discards every persisted field when a malformed product id becomes a 400 mapped to notFound', async () => {
+    mockedHttpRequest.mockResolvedValue(createApiError('notFound'))
+    const store = makeStore(fullyStartedCheckout())
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('discarded')
+    expect(mockedHttpRequest).toHaveBeenCalledWith(`/products/${PRODUCT_ID}`, {
+      map400ToNotFound: true,
+    })
+    const cleared = store.getState().checkout
+    expect(cleared.selectedProductId).toBeNull()
+    expect(cleared.quantity).toBe(1)
+    expect(cleared.delivery).toBeNull()
+    expect(cleared.transactionId).toBeNull()
+    expect(cleared.idempotencyKey).toBeNull()
+  })
+
+  it.each(['rateLimited', 'network', 'server', 'badRequest'] as const)(
     'keeps progress on a transient %s error so it can retry later',
     async (kind) => {
       mockedHttpRequest.mockResolvedValue(createApiError(kind))
-      const store = makeStore(startedCheckout())
+      const store = makeStore(fullyStartedCheckout())
 
       const outcome = await store.dispatch(restoreProgress()).unwrap()
 
       expect(outcome).toBe('transient')
       expect(store.getState().checkout.selectedProductId).toBe(PRODUCT_ID)
       expect(store.getState().checkout.quantity).toBe(3)
+      expect(store.getState().checkout.transactionId).toBe(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      )
+      expect(store.getState().checkout.idempotencyKey).toBe('key-1234567890abcdef')
     },
   )
 
