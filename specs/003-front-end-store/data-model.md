@@ -97,13 +97,14 @@ Single versioned document; the exact contract is in `contracts/persistence.md`.
 
 | Field | Type | Rules |
 |-------|------|-------|
-| `version` | integer | must equal the current schema version, else discard |
+| `version` | integer | must equal the current schema version (2), else discard |
 | `savedAt` | ISO date string | discard when `now - savedAt > 24 h` |
 | `currentStep` | enum | one of the four steps |
 | `selectedProductId` | string \| null | discarded progress if the product no longer exists |
 | `quantity` | integer | ≥ 1 |
 | `delivery` | DeliveryData \| null | personal; removed with the document |
 | `transactionId` | string \| null | non-sensitive reference |
+| `idempotencyKey` | string \| null | `null` or 16–64 chars of `[A-Za-z0-9_-]`, else discard |
 
 Serialization invariant (tested): no key in the serialized document matches card-like patterns
 (`card`, `cardNumber`, `cvc`, `cvv`, `pan`, `expiry`, …).
