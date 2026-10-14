@@ -18,6 +18,7 @@ import {
   transactionReceived,
 } from '@/features/checkout/checkout.slice'
 import {
+  ensureIdempotencyKey,
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
@@ -30,6 +31,7 @@ import {
 import { OrderSummary } from '@/features/checkout/OrderSummary'
 import { PaymentStatus } from '@/features/checkout/PaymentStatus'
 import { usePaymentPolling } from '@/features/checkout/usePaymentPolling'
+import { describePaymentError } from '@/features/checkout/payment-errors'
 import { Spinner } from '@/shared/ui/Spinner'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { isApiError } from '@/shared/api/http'
@@ -71,6 +73,8 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
   const [createdInstallments, setCreatedInstallments] = useState(1)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<ApiError | null>(null)
+  const [priceChanged, setPriceChanged] = useState(false)
+  const payingRef = useRef(false)
 
   usePaymentPolling()
 
@@ -82,6 +86,12 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
       void dispatch(loadCheckoutConfig())
     }
   }, [open, configStatus, dispatch])
+
+  useEffect(() => {
+    if (open && step !== 'product' && !idempotencyKey) {
+      void dispatch(ensureIdempotencyKey())
+    }
+  }, [open, step, idempotencyKey, dispatch])
 
   useEffect(() => {
     if (open && step === 'summary' && !cardToken) {
@@ -115,7 +125,9 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
     setCardToken(null)
     setCreatedInstallments(1)
     setPayError(null)
+    setPriceChanged(false)
     setPaying(false)
+    payingRef.current = false
     onClose()
   }
 
@@ -123,12 +135,14 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
     setCardToken(result.cardToken)
     setCreatedInstallments(result.installments)
     setPayError(null)
+    setPriceChanged(false)
     dispatch(transactionReceived(result.transaction))
     dispatch(checkoutStepChanged('summary'))
   }
 
   const handlePay = async () => {
-    if (paying || !transaction || !cardToken) return
+    if (payingRef.current || !transaction || !cardToken) return
+    payingRef.current = true
     setPaying(true)
     setPayError(null)
 
@@ -144,17 +158,42 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
 
     if (isApiError(outcome)) {
       setPayError(outcome)
-      const keepToken =
-        outcome.kind === 'providerUnavailable' || outcome.kind === 'network'
-      if (!keepToken) {
-        setCardToken(null)
-        dispatch(checkoutStepChanged('cardAndDelivery'))
+      const guidance = describePaymentError(outcome)
+      switch (guidance?.action) {
+        case 'reenterCard':
+          // The token is no longer usable: drop it and ask for the card again
+          // while keeping the same transaction and the same idempotency key.
+          setCardToken(null)
+          dispatch(checkoutStepChanged('cardAndDelivery'))
+          break
+        case 'showStatus':
+          // The purchase can no longer be paid here; show its real status
+          // instead of starting a second payment.
+          setCardToken(null)
+          dispatch(checkoutStepChanged('finalStatus'))
+          void dispatch(readTransactionStatus(transaction.id))
+          break
+        case 'startFresh':
+          // The key can no longer continue: start a brand new purchase.
+          setCardToken(null)
+          void dispatch(retryPurchase())
+          break
+        case 'retry':
+        case 'adjustQuantity':
+        case 'acceptContracts':
+        default:
+          // Keep the summary and the token so Pagar can be retried safely.
+          break
       }
     } else {
+      if (outcome.amounts.totalInCents !== transaction.amounts.totalInCents) {
+        setPriceChanged(true)
+      }
       setCardToken(null)
       dispatch(transactionReceived(outcome))
       dispatch(checkoutStepChanged('finalStatus'))
     }
+    payingRef.current = false
     setPaying(false)
   }
 
@@ -168,6 +207,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
   const retryPayment = () => {
     setPayError(null)
     setCardToken(null)
+    setPriceChanged(false)
     void dispatch(retryPurchase())
   }
 
@@ -203,6 +243,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
           error={payError ?? paymentError}
           onRecheck={recheckPayment}
           onRetry={retryPayment}
+          priceChanged={priceChanged}
         />
       )
     }
@@ -242,6 +283,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
           productId={productId}
           quantity={quantity}
           onCreated={handleCreated}
+          error={payError}
         />
       )
     }
@@ -257,7 +299,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
         close()
       }}
       onKeyDown={handleKeyDown}
-      className="w-full max-w-lg rounded-lg p-6 backdrop:bg-black/40 open:block"
+      className="w-[calc(100vw-2rem)] max-w-lg overflow-x-hidden rounded-lg p-6 backdrop:bg-black/40 open:block"
     >
       <div className="flex items-start justify-between gap-4">
         <h2
