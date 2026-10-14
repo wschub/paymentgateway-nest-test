@@ -85,6 +85,58 @@ describe('tokenizeCard', () => {
     })
   })
 
+  it.each([
+    ['4242 4242 4242 4242', '4242424242424242'],
+    ['4242-4242-4242-4242', '4242424242424242'],
+    ['  4242 4242 4242 4242  ', '4242424242424242'],
+  ])(
+    'normalizes the displayed number %p to digits only before POSTing it',
+    async (displayed, digits) => {
+      fetchMock.mockResolvedValue(
+        makeResponse(201, {
+          status: 'CREATED',
+          data: { id: 'tok_1', brand: 'VISA', last_four: '4242', name: 'VISA' },
+        }),
+      )
+
+      await tokenizeCard({ ...input(), card: { ...CARD, number: displayed } })
+
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+      const body = JSON.parse(String(init.body)) as Record<string, string>
+      expect(body.number).toBe(digits)
+      expect(body.number).toMatch(/^\d{12,19}$/)
+    },
+  )
+
+  it('normalizes every card field before POSTing it', async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse(201, {
+        status: 'CREATED',
+        data: { id: 'tok_1', brand: 'VISA', last_four: '4242', name: 'VISA' },
+      }),
+    )
+
+    await tokenizeCard({
+      ...input(),
+      card: {
+        number: '4242 4242 4242 4242',
+        cvc: '1 23',
+        expMonth: '8',
+        expYear: '2029',
+        cardholder: '  Test Buyer  ',
+      },
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      number: '4242424242424242',
+      cvc: '123',
+      exp_month: '08',
+      exp_year: '29',
+      card_holder: 'Test Buyer',
+    })
+  })
+
   it('never logs the card number or CVC', async () => {
     fetchMock.mockResolvedValue(
       makeResponse(201, {

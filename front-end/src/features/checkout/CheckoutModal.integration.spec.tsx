@@ -26,6 +26,7 @@ import { API_URL } from '@/config'
  */
 
 const CARD_NUMBER = '4242424242424242'
+const SPACED_CARD_NUMBER = '4242 4242 4242 4242'
 const CVC = '123'
 const PRODUCT_ID = 'p1'
 const START_KEY = 'key-abcdefghijklmnop'
@@ -211,7 +212,7 @@ function Harness(): ReactElement {
   )
 }
 
-function fillForm(): void {
+function fillForm(cardNumber: string = CARD_NUMBER): void {
   fireEvent.change(screen.getByLabelText('Nombre completo'), {
     target: { value: 'Juan Pérez' },
   })
@@ -231,7 +232,7 @@ function fillForm(): void {
     target: { value: 'Cundinamarca' },
   })
   fireEvent.change(screen.getByLabelText('Número de tarjeta'), {
-    target: { value: CARD_NUMBER },
+    target: { value: cardNumber },
   })
   fireEvent.change(screen.getByLabelText('Vencimiento (MM/AA)'), {
     target: { value: '12/29' },
@@ -246,9 +247,11 @@ function fillForm(): void {
   fireEvent.click(screen.getByRole('checkbox', { name: /datos personales/i }))
 }
 
-async function reachSummaryWithCard(): Promise<void> {
+async function reachSummaryWithCard(
+  cardNumber: string = CARD_NUMBER,
+): Promise<void> {
   await screen.findByRole('button', { name: 'Continuar' })
-  fillForm()
+  fillForm(cardNumber)
   fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
   await screen.findByRole('heading', { name: 'Resumen de la compra' })
 }
@@ -311,6 +314,22 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     expect(providerTokenizeCalls()).toHaveLength(1)
     expect(createPosts()).toHaveLength(1)
   })
+
+  it.each(['4242 4242 4242 4242', '4242-4242-4242-4242'])(
+    'sends the card number to the provider as digits only when typed as %s',
+    async (typed) => {
+      renderModal()
+      await screen.findByRole('button', { name: 'Continuar' })
+      fillForm(typed)
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+      await screen.findByRole('heading', { name: 'Resumen de la compra' })
+
+      const [call] = providerTokenizeCalls()
+      const body = call.body as Record<string, string>
+      expect(body.number).toBe(CARD_NUMBER)
+      expect(body.number).toMatch(/^\d{12,19}$/)
+    },
+  )
 
   it('reuses the same token and the same key on a 503 retry and issues no new POST /transactions', async () => {
     paymentQueue = [{ status: 503 }, { status: 202, body: view('PENDING') }]
@@ -500,22 +519,28 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     paymentQueue = [{ status: 201, body: view('APPROVED') }]
     const { store, storage } = renderModal()
 
-    await reachSummaryWithCard()
+    await reachSummaryWithCard(SPACED_CARD_NUMBER)
     fireEvent.click(screen.getByRole('button', { name: 'Pagar' }))
     await screen.findByRole('heading', { name: '¡Pago aprobado!' })
 
+    const leaks = [CARD_NUMBER, SPACED_CARD_NUMBER, CVC]
+
     const state = store.getState()
-    expect(JSON.stringify(state)).not.toContain(CARD_NUMBER)
-    expect(JSON.stringify(state)).not.toContain(CVC)
+    for (const value of leaks) {
+      expect(JSON.stringify(state)).not.toContain(value)
+    }
 
     for (const value of Object.values(storage.data)) {
-      expect(value).not.toContain(CARD_NUMBER)
-      expect(value).not.toContain(CVC)
+      for (const secret of leaks) {
+        expect(value).not.toContain(secret)
+      }
     }
 
     for (const call of ourApiCalls()) {
-      expect(JSON.stringify(call.body ?? null)).not.toContain(CARD_NUMBER)
-      expect(JSON.stringify(call.body ?? null)).not.toContain(CVC)
+      const body = JSON.stringify(call.body ?? null)
+      for (const secret of leaks) {
+        expect(body).not.toContain(secret)
+      }
     }
 
     const forbidden = [
