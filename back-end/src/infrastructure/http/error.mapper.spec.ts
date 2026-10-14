@@ -212,7 +212,7 @@ describe('mapErrorToHttp', () => {
   });
 
   it('maps an unexpected error to a generic 500', () => {
-    expect(mapErrorToHttp(new Error('sk_live_4242424242424242'))).toEqual({
+    expect(mapErrorToHttp(new Error('fake-secret-for-test'))).toEqual({
       statusCode: 500,
       code: 'INTERNAL_ERROR',
       message: 'Internal server error',
