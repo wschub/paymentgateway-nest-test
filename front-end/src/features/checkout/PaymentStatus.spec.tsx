@@ -128,6 +128,40 @@ describe('PaymentStatus', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('rebuilds the error text from the kind and never shows the raw back-end text', () => {
+    renderStatus({
+      status: 'error',
+      error: {
+        kind: 'providerUnavailable',
+        message: 'PAYMENT_PROVIDER_UNAVAILABLE at /transactions/1 (503)',
+      },
+    })
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/no está disponible/i)
+    expect(alert).not.toHaveTextContent(/PAYMENT_PROVIDER_UNAVAILABLE/)
+    expect(alert).not.toHaveTextContent('/transactions')
+  })
+
+  it('warns and shows the server total when the charge amount changed', () => {
+    renderStatus({
+      transaction: buildTransaction({
+        status: 'APPROVED',
+        amounts: {
+          productAmountInCents: 7000000,
+          baseFeeInCents: 500000,
+          deliveryFeeInCents: 1200000,
+          totalInCents: 9000000,
+        },
+      }),
+      status: 'approved',
+      priceChanged: true,
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/precio cambió/i)
+    expect(screen.getByText(/90\.000/)).toBeInTheDocument()
+  })
+
   it.each<TransactionStatus>(['APPROVED', 'DECLINED', 'VOIDED', 'ERROR'])(
     'never shows a stale success for a restored %s final transaction',
     (status) => {

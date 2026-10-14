@@ -67,4 +67,39 @@ describe('OrderSummary', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/no fue aprobado/i)
   })
+
+  it('renders our own message for the error kind and never the raw back-end text', () => {
+    render(
+      <OrderSummary
+        transaction={TRANSACTION}
+        paying={false}
+        error={{
+          kind: 'providerUnavailable',
+          message: 'PAYMENT_PROVIDER_UNAVAILABLE at /transactions/1/payment (503)',
+        }}
+        onPay={() => {}}
+      />,
+    )
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/no está disponible/i)
+    expect(alert).not.toHaveTextContent(/PAYMENT_PROVIDER_UNAVAILABLE/)
+    expect(alert).not.toHaveTextContent('/transactions')
+  })
+
+  it('offers the next action for an error that needs a different step', () => {
+    render(
+      <OrderSummary
+        transaction={TRANSACTION}
+        paying={false}
+        error={createApiError('soldOut')}
+        onPay={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/se agotó/i)
+    expect(
+      screen.getByText(/Ajusta la cantidad o elige otro producto/i),
+    ).toBeInTheDocument()
+  })
 })
