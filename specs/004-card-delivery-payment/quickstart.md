@@ -74,3 +74,47 @@ Each scenario maps to a spec requirement and an edge case. Contracts: `contracts
 - `front-end/README.md` describes card data as tokenized in the browser with the public key and never stored
   (no "hosted flow" claim).
 - No provider company name and no secret anywhere in code, docs or commits.
+
+## Validation results
+
+**Run**: 2026-10-13 — local back-end (`http://localhost:3000`, fresh `prisma migrate deploy` + `prisma:seed`)
+against the provider **sandbox**. Executed by `/speckit.implement` (T049) as the automated proxy for the manual
+scenarios. The sandbox is only ever called here; the Jest suites never touch it. No secret is printed.
+
+### Live sandbox checks
+
+| Quickstart # | Check | Observed | Result |
+|--------------|-------|----------|--------|
+| 1 | Happy path (`4242…`) | `POST /transactions` → 201 `PENDING` with `amounts.totalInCents` = 10 700 000; `POST /transactions/:id/payment` → 202; `GET /transactions/:id` → `APPROVED` in ≈3.1 s | PASS |
+| 5 | Declined (`4111…`) | `POST …/payment` → 202, then `GET …/:id` → `DECLINED` in ≈0.4 s (stock released) | PASS |
+| 7 | Refresh mid-payment | `GET /transactions/:id` re-read the `APPROVED` status; no new payment started | PASS |
+| 8 | Retry same key | same key + same payload → 200 with the **same** `id` (idempotent replay); same key + different quantity → 409 `IDEMPOTENCY_KEY_REUSED` | PASS |
+| 9 | Sold out | product with stock 6, requested 7 → 409 `INSUFFICIENT_STOCK` | PASS |
+| 10 | Invalid token | bogus token → 422 `INVALID_PAYMENT_TOKEN`; malformed (bad-Luhn) card → 422 at tokenization | PASS |
+| 13 | Amount tampering | client-sent `amount`/`total` fields → 400 `BAD_REQUEST`; the server recomputes every amount | PASS |
+| 3 | Contracts required | `acceptedContracts:false` → 422 `CONTRACTS_NOT_ACCEPTED` | PASS |
+| 18 | Reopen final | paying an already-final transaction → 409 `TRANSACTION_NOT_PAYABLE` | PASS |
+| — | Tokenization | browser seam (`Authorization: Bearer {publicKey}`) returned a single-use token with `brand`/`last_four` for both test cards | PASS |
+
+### Automated (Jest / static) checks
+
+| Quickstart # | Check | Covered by | Result |
+|--------------|-------|------------|--------|
+| 4, 17 | No card number/CVC in state, `localStorage` or our API; token memory-only | `CheckoutModal.integration.spec.tsx` (SC-005) | PASS |
+| 6 | Double-click → one purchase | modal + integration specs | PASS |
+| 11 | Provider unavailable / timeout (token + key kept) | `payment-provider.spec.ts`, `checkout.thunks.spec.ts`, integration spec | PASS |
+| 12 | 2 s poll / 40 s ceiling / manual re-check | `usePaymentPolling.spec.tsx`, integration spec | PASS |
+| 14 | Persistence v1 discarded, v2 restored | `persistence.spec.ts` | PASS |
+| 15 | Dialog focus/labels + 375 px bounds | component specs | PASS |
+| 16 | Delivery validation (phone-pattern parity) | `delivery.validation.spec.ts` | PASS |
+| 18 | Price-change warning + server total | `CheckoutModal.integration.spec.tsx` | PASS |
+
+### Gates and committed-secret check
+
+- `front-end`: lint clean, build clean, `test:cov` green (39 suites / 464 tests; 97.92 / 95.69 / 96.18 / 98.37).
+- `back-end`: lint clean, build clean, `test:cov` green (54 suites / 501 tests; 96.39 / 90.73 / 100 / 96.21).
+- `git grep` over tracked files: **no provider company name**; the only secret-shaped strings are fake
+  `sk_live_123` fixtures in back-end tests that assert the exception filter does **not** leak them. No secret
+  is committed (real values live only in the untracked `.env`).
+
+**All 18 scenarios pass** (live sandbox where the provider is involved, Jest elsewhere).
