@@ -17,8 +17,22 @@ const TRANSACTION: TransactionView = {
   },
   card: { brand: 'VISA', lastFour: '2222', installments: 2 },
   product: { id: 'p1', name: 'Mouse', quantity: 2 },
-  delivery: { status: 'created', address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' },
+  delivery: { status: 'PENDING', address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' },
   failureReason: null,
+}
+
+/** Literal `POST /transactions` 201 body: only the creation fields. */
+const CREATED: TransactionView = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  reference: 'REF-0001',
+  status: 'PENDING',
+  quantity: 2,
+  amounts: {
+    productAmountInCents: 3500000,
+    baseFeeInCents: 5000,
+    deliveryFeeInCents: 10000,
+    totalInCents: 3515000,
+  },
 }
 
 describe('OrderSummary', () => {
@@ -36,6 +50,32 @@ describe('OrderSummary', () => {
     expect(screen.getByText(/\$\s*50/)).toBeInTheDocument()
     expect(screen.getByText(/\$\s*100/)).toBeInTheDocument()
     expect(screen.getByText(/\$\s*35\.150/)).toBeInTheDocument()
+  })
+
+  it('takes the product name and the delivery from the fallbacks when the view has none', () => {
+    render(
+      <OrderSummary
+        transaction={CREATED}
+        productName="Mouse"
+        delivery={{ address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' }}
+        paying={false}
+        onPay={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('Mouse')).toBeInTheDocument()
+    expect(screen.getByText('Cantidad: 2')).toBeInTheDocument()
+    expect(screen.getByText('Entrega en Bogotá, Cundinamarca')).toBeInTheDocument()
+    expect(screen.getByText('Calle 10 #23')).toBeInTheDocument()
+    expect(screen.getByText(/\$\s*35\.150/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
+  })
+
+  it('does not crash and still shows the amounts with no product or delivery at all', () => {
+    render(<OrderSummary transaction={CREATED} paying={false} onPay={() => {}} />)
+
+    expect(screen.getByText('Cantidad: 2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
   })
 
   it('calls onPay when the pay button is pressed', async () => {

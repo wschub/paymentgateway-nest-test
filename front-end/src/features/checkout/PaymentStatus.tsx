@@ -1,13 +1,18 @@
 import type { ReactNode } from 'react'
 import type { ApiError } from '@/shared/api/api.errors'
 import type { PaymentStatus as PaymentStatusValue } from '@/features/checkout/checkout.slice'
-import type { TransactionView } from '@/features/checkout/checkout.types'
+import type {
+  DeliveryLocation,
+  TransactionView,
+} from '@/features/checkout/checkout.types'
 import { describePaymentError } from '@/features/checkout/payment-errors'
 import { Spinner } from '@/shared/ui/Spinner'
 import { formatPriceCOP } from '@/shared/format/money'
 
 export interface PaymentStatusProps {
   transaction: TransactionView | null
+  /** Delivery typed in the form, used when the view has no `delivery`. */
+  delivery?: DeliveryLocation | null
   status: PaymentStatusValue
   error: ApiError | null
   onRecheck: () => void
@@ -17,6 +22,7 @@ export interface PaymentStatusProps {
 
 export function PaymentStatus({
   transaction,
+  delivery: deliveryFallback = null,
   status,
   error,
   onRecheck,
@@ -24,6 +30,7 @@ export function PaymentStatus({
   priceChanged = false,
 }: PaymentStatusProps) {
   const guidance = describePaymentError(error)
+  const delivery = transaction?.delivery ?? deliveryFallback
 
   const priceChangedNotice = priceChanged ? (
     <p role="alert" className="text-sm text-amber-700">
@@ -86,10 +93,10 @@ export function PaymentStatus({
             <p className="text-base text-gray-800">
               Total pagado: {formatPriceCOP(transaction.amounts.totalInCents)}
             </p>
-            {transaction.delivery ? (
+            {delivery ? (
               <p className="text-sm text-gray-600">
-                Entrega asignada a {transaction.delivery.address},{' '}
-                {transaction.delivery.city}, {transaction.delivery.region}
+                Entrega asignada a {delivery.address}, {delivery.city},{' '}
+                {delivery.region}
               </p>
             ) : null}
           </>

@@ -5,6 +5,7 @@ import {
   selectCheckoutConfigError,
   selectCheckoutConfigStatus,
   selectCheckoutStep,
+  selectDeliveryDetails,
   selectIdempotencyKey,
   selectPaymentError,
   selectPaymentStatus,
@@ -13,6 +14,7 @@ import {
   selectTransaction,
   selectTransactionId,
 } from '@/features/checkout/checkout.selectors'
+import { selectProductDetail } from '@/features/product/product.selectors'
 import {
   checkoutStepChanged,
   transactionReceived,
@@ -30,6 +32,7 @@ import {
 } from '@/features/checkout/CardAndDeliveryForm'
 import { OrderSummary } from '@/features/checkout/OrderSummary'
 import { PaymentStatus } from '@/features/checkout/PaymentStatus'
+import { CheckoutErrorBoundary } from '@/features/checkout/CheckoutErrorBoundary'
 import { usePaymentPolling } from '@/features/checkout/usePaymentPolling'
 import { describePaymentError } from '@/features/checkout/payment-errors'
 import { Spinner } from '@/shared/ui/Spinner'
@@ -68,6 +71,8 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
   const transactionId = useAppSelector(selectTransactionId)
   const paymentStatus = useAppSelector(selectPaymentStatus)
   const paymentError = useAppSelector(selectPaymentError)
+  const product = useAppSelector(selectProductDetail)
+  const delivery = useAppSelector(selectDeliveryDetails)
 
   const [cardToken, setCardToken] = useState<string | null>(null)
   const [createdInstallments, setCreatedInstallments] = useState(1)
@@ -239,6 +244,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
       return (
         <PaymentStatus
           transaction={transaction}
+          delivery={delivery}
           status={paymentStatus}
           error={payError ?? paymentError}
           onRecheck={recheckPayment}
@@ -251,6 +257,8 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
       return (
         <OrderSummary
           transaction={transaction}
+          productName={product?.name ?? null}
+          delivery={delivery}
           paying={paying}
           error={payError}
           onPay={() => {
@@ -320,7 +328,11 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
         </button>
       </div>
 
-      <div className="mt-4">{renderBody()}</div>
+      <div className="mt-4">
+        <CheckoutErrorBoundary onBackToProduct={close} resetKey={open}>
+          {renderBody()}
+        </CheckoutErrorBoundary>
+      </div>
     </dialog>
   )
 }

@@ -16,7 +16,11 @@ import {
 } from '@/features/product/product.slice'
 import { toTransactionPayload } from '@/features/checkout/delivery.validation'
 import { generateIdempotencyKey } from '@/features/checkout/idempotency'
-import type { CheckoutConfig, TransactionView } from '@/features/checkout/checkout.types'
+import type {
+  CheckoutConfig,
+  TransactionCreated,
+  TransactionView,
+} from '@/features/checkout/checkout.types'
 import { httpRequest, isApiError } from '@/shared/api/http'
 import type { ApiError } from '@/shared/api/api.errors'
 
@@ -110,12 +114,12 @@ export interface CreateTransactionArgs {
 }
 
 export const createTransaction = createAsyncThunk<
-  TransactionView,
+  TransactionCreated,
   CreateTransactionArgs,
   { rejectValue: ApiError }
 >('checkout/createTransaction', async (args, { rejectWithValue }) => {
   const { customer, delivery } = toTransactionPayload(args.delivery)
-  const result = await httpRequest<TransactionView>('/transactions', {
+  const result = await httpRequest<TransactionCreated>('/transactions', {
     method: 'POST',
     headers: { 'Idempotency-Key': args.idempotencyKey },
     body: {

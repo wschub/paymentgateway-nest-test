@@ -1,10 +1,17 @@
-import type { TransactionView } from '@/features/checkout/checkout.types'
+import type {
+  DeliveryLocation,
+  TransactionView,
+} from '@/features/checkout/checkout.types'
 import { describePaymentError } from '@/features/checkout/payment-errors'
 import { formatPriceCOP } from '@/shared/format/money'
 import type { ApiError } from '@/shared/api/api.errors'
 
 export interface OrderSummaryProps {
   transaction: TransactionView
+  /** Name of the selected product, used when the view has no `product`. */
+  productName?: string | null
+  /** Delivery typed in the form, used when the view has no `delivery`. */
+  delivery?: DeliveryLocation | null
   paying: boolean
   error?: ApiError | null
   onPay: () => void
@@ -31,17 +38,25 @@ function AmountRow({ label, cents, emphasis = false }: AmountRowProps) {
 
 export function OrderSummary({
   transaction,
+  productName = null,
+  delivery: deliveryFallback = null,
   paying,
   error = null,
   onPay,
 }: OrderSummaryProps) {
-  const { amounts, product, card, delivery } = transaction
+  const { amounts } = transaction
+  // `POST /transactions` has no `product`, `card` or `delivery`: fall back to
+  // the selected product and the delivery typed in the form.
+  const product = transaction.product ?? null
+  const card = transaction.card ?? null
+  const delivery = transaction.delivery ?? deliveryFallback
+  const productLabel = product?.name ?? productName ?? ''
   const guidance = describePaymentError(error)
 
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-        <h3 className="text-base font-semibold text-gray-900">{product.name}</h3>
+        <h3 className="text-base font-semibold text-gray-900">{productLabel}</h3>
         <p className="text-sm text-gray-600">
           Cantidad: {transaction.quantity}
         </p>
@@ -55,6 +70,9 @@ export function OrderSummary({
           <p className="text-sm text-gray-600">
             Entrega en {delivery.city}, {delivery.region}
           </p>
+        ) : null}
+        {delivery ? (
+          <p className="text-sm text-gray-600">{delivery.address}</p>
         ) : null}
       </div>
 
