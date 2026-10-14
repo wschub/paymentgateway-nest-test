@@ -12,16 +12,14 @@ import { useProductReRead } from '@/features/product/useProductReRead'
 import { QuantitySelector } from '@/features/product/QuantitySelector'
 import {
   selectCheckoutStep,
-  selectIdempotencyKey,
   selectPurchaseQuantity,
   selectSelectedProductId,
 } from '@/features/checkout/checkout.selectors'
 import {
   checkoutStepChanged,
-  idempotencyKeySet,
   startOver,
 } from '@/features/checkout/checkout.slice'
-import { generateIdempotencyKey } from '@/features/checkout/idempotency'
+import { ensureIdempotencyKey } from '@/features/checkout/checkout.thunks'
 import { CheckoutModal } from '@/features/checkout/CheckoutModal'
 import { Image } from '@/shared/ui/Image'
 import { Spinner } from '@/shared/ui/Spinner'
@@ -46,7 +44,6 @@ export function ProductPage() {
 
   const selectedProductId = useAppSelector(selectSelectedProductId)
   const checkoutQuantity = useAppSelector(selectPurchaseQuantity)
-  const idempotencyKey = useAppSelector(selectIdempotencyKey)
   const checkoutStep = useAppSelector(selectCheckoutStep)
 
   const [checkoutOpen, setCheckoutOpen] = useState(false)
@@ -68,9 +65,7 @@ export function ProductPage() {
 
   const startPurchase = () => {
     requestPurchase(() => {
-      if (!idempotencyKey) {
-        dispatch(idempotencyKeySet(generateIdempotencyKey()))
-      }
+      void dispatch(ensureIdempotencyKey())
       dispatch(checkoutStepChanged('cardAndDelivery'))
       setCheckoutOpen(true)
     })

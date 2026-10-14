@@ -127,22 +127,22 @@ that client-supplied amounts never change what is charged.
 
 ### Tests for User Story 3 ⚠️ (write first; ensure they FAIL)
 
-- [ ] T031 [P] [US3] Error-kind → message/next-action tests in `front-end/src/features/checkout/CheckoutModal.spec.tsx` (and/or `checkout.slice.spec.ts`): `soldOut`, `declined` final, `invalidToken` (highlight card), `providerUnavailable` (retry), `idempotencyConflict`, `notPayable`, `contractsNotAccepted`.
-- [ ] T032 [US3] Back-end verification tests — assert each enumerated case, using the existing spec when it exists or adding one when it does not:
+- [X] T031 [P] [US3] Error-kind → message/next-action tests in `front-end/src/features/checkout/CheckoutModal.spec.tsx` (and/or `checkout.slice.spec.ts`): `soldOut`, `declined` final, `invalidToken` (highlight card), `providerUnavailable` (retry), `idempotencyConflict`, `notPayable`, `contractsNotAccepted`.
+- [X] T032 [US3] Back-end verification tests — assert each enumerated case, using the existing spec when it exists or adding one when it does not:
   - amount tampering rejected with `400` → `back-end/src/infrastructure/http/create-transaction.dto.spec.ts` (existing).
   - `409 IDEMPOTENCY_KEY_REUSED` for a changed payload, and replay (same key + payload returns the same id/reference) → `back-end/src/application/use-cases/create-transaction.use-case.spec.ts` (existing).
   - `409 TRANSACTION_NOT_PAYABLE` and `422 INVALID_PAYMENT_TOKEN` → `back-end/src/application/use-cases/pay-transaction.use-case.spec.ts` (existing).
   - `409 INSUFFICIENT_STOCK` and atomic stock that never drops below zero → create-transaction use-case spec + product repository spec (existing; add the atomic assertion if missing).
   - unpaid `PENDING` older than the reservation window is voided as `VOIDED`/`RESERVATION_EXPIRED` on read → transaction-status use-case spec (add if missing).
-- [ ] T033 [US3] End-to-end edge-case integration tests in `front-end/src/features/checkout/CheckoutModal.spec.tsx`: double-click on Continuar/Pagar → one request; declined → `transactionId` cleared and a **new** idempotency key for the retry with a new card; retry after a network/503 failure at **Pagar** reuses the **same** token and the **same** key and issues **no** new `POST /transactions` (only the same `POST /transactions/:id/payment`); an `invalidToken` at Pagar discards the token and re-enters the card with the **same** key while the purchase is `PENDING`; sold out → no charge; closing after Continuar leaves a `PENDING` purchase that is read back as `VOIDED`/`RESERVATION_EXPIRED`.
+- [X] T033 [US3] End-to-end edge-case integration tests in `front-end/src/features/checkout/CheckoutModal.spec.tsx`: double-click on Continuar/Pagar → one request; declined → `transactionId` cleared and a **new** idempotency key for the retry with a new card; retry after a network/503 failure at **Pagar** reuses the **same** token and the **same** key and issues **no** new `POST /transactions` (only the same `POST /transactions/:id/payment`); an `invalidToken` at Pagar discards the token and re-enters the card with the **same** key while the purchase is `PENDING`; sold out → no charge; closing after Continuar leaves a `PENDING` purchase that is read back as `VOIDED`/`RESERVATION_EXPIRED`.
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Map every error kind to a clear message and next action in `front-end/src/features/checkout/CheckoutModal.tsx` and `PaymentStatus.tsx` (`invalidToken`/declined → re-enter card; `soldOut` → adjust/block; `providerUnavailable`/`providerRejected` → retry; `notPayable` → show current status; `idempotencyConflict` → start fresh).
-- [ ] T035 [US3] Implement the idempotency-key lifecycle in `front-end/src/features/checkout/checkout.thunks.ts`: generate the key once when the modal opens (matching `IDEMPOTENCY_KEY_PATTERN`) and persist it (v2); reuse it on every retry **while the purchase is `PENDING`** (network failure, 503, `invalidToken`, replay); on any final `DECLINED`/`VOIDED`/`ERROR` (incl. `RESERVATION_EXPIRED`) clear `transactionId` and generate a **new** key. The key is required only when `currentStep !== 'product'` or a `transactionId` exists.
-- [ ] T036 [US3] Announce errors and stock changes through `LiveRegion` and associate field errors with inputs via `aria-describedby` in `front-end/src/features/checkout/CardAndDeliveryForm.tsx`; keep the 375 px modal free of horizontal overflow.
-- [ ] T046 [US3] SC-005 privacy test: after tokenizing and paying with `4242424242424242` / CVC `123`, assert that `JSON.stringify(store.getState())`, `localStorage`, and the bodies of every `fetch` to **our** API contain neither the card number nor the CVC; also assert that `Object.keys(store.getState())` and `Object.keys(JSON.parse(localStorage.getItem('checkout-progress')!))` contain no card-like keys (`card`, `cvc`, `cvv`, `pan`, `expiry`, `expiration`, `securityCode`), the only documented exceptions being `cardBrand` and `cardLastFour` (non-sensitive, in-memory only — and never present in the persisted document).
-- [ ] T047 [US3] Front-end tests for the remaining edge cases in `front-end/src/features/checkout/CheckoutModal.spec.tsx`: reopening an already-final (completed/voided) transaction shows its status and starts no new payment (`notPayable`); a price change between the summary and the charge is warned about and the displayed total equals the server-recomputed total.
+- [X] T034 [US3] Map every error kind to a clear message and next action in `front-end/src/features/checkout/CheckoutModal.tsx` and `PaymentStatus.tsx` (`invalidToken`/declined → re-enter card; `soldOut` → adjust/block; `providerUnavailable`/`providerRejected` → retry; `notPayable` → show current status; `idempotencyConflict` → start fresh).
+- [X] T035 [US3] Implement the idempotency-key lifecycle in `front-end/src/features/checkout/checkout.thunks.ts`: generate the key once when the modal opens (matching `IDEMPOTENCY_KEY_PATTERN`) and persist it (v2); reuse it on every retry **while the purchase is `PENDING`** (network failure, 503, `invalidToken`, replay); on any final `DECLINED`/`VOIDED`/`ERROR` (incl. `RESERVATION_EXPIRED`) clear `transactionId` and generate a **new** key. The key is required only when `currentStep !== 'product'` or a `transactionId` exists.
+- [X] T036 [US3] Announce errors and stock changes through `LiveRegion` and associate field errors with inputs via `aria-describedby` in `front-end/src/features/checkout/CardAndDeliveryForm.tsx`; keep the 375 px modal free of horizontal overflow.
+- [X] T046 [US3] SC-005 privacy test: after tokenizing and paying with `4242424242424242` / CVC `123`, assert that `JSON.stringify(store.getState())`, `localStorage`, and the bodies of every `fetch` to **our** API contain neither the card number nor the CVC; also assert that `Object.keys(store.getState())` and `Object.keys(JSON.parse(localStorage.getItem('checkout-progress')!))` contain no card-like keys (`card`, `cvc`, `cvv`, `pan`, `expiry`, `expiration`, `securityCode`), the only documented exceptions being `cardBrand` and `cardLastFour` (non-sensitive, in-memory only — and never present in the persisted document).
+- [X] T047 [US3] Front-end tests for the remaining edge cases in `front-end/src/features/checkout/CheckoutModal.spec.tsx`: reopening an already-final (completed/voided) transaction shows its status and starts no new payment (`notPayable`); a price change between the summary and the charge is warned about and the displayed total equals the server-recomputed total.
 
 **Checkpoint**: All three stories work independently.
 
@@ -152,10 +152,10 @@ that client-supplied amounts never change what is charged.
 
 **Purpose**: Documentation, verification and final quality gates.
 
-- [ ] T037 [P] Correct `front-end/README.md`: replace "lives only in the payment provider's hosted flow" with "tokenized in the browser with the public key, never stored" (hosted widget is not used, D5); fix the lint note to say **both** `src/shared/api/http.ts` **and** `src/shared/api/payment-provider.ts` may call `fetch`; correct the "read-only product API" description so it also covers the checkout-config, transaction-create, payment and status endpoints; and reference the version-2 persistence contract and the idempotency key.
-- [ ] T039 Run `front-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % and fix gaps.
-- [ ] T040 Run `back-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % for touched code.
-- [ ] T041 Validate `quickstart.md` scenarios 1–18 (sandbox manual runs for the happy path and declined/error cards only); confirm no provider company name and no secret was committed.
+- [X] T037 [P] Correct `front-end/README.md`: replace "lives only in the payment provider's hosted flow" with "tokenized in the browser with the public key, never stored" (hosted widget is not used, D5); fix the lint note to say **both** `src/shared/api/http.ts` **and** `src/shared/api/payment-provider.ts` may call `fetch`; correct the "read-only product API" description so it also covers the checkout-config, transaction-create, payment and status endpoints; and reference the version-2 persistence contract and the idempotency key. *(Completed via T048.)*
+- [X] T039 Run `front-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % and fix gaps. *(Verified: lint + build clean; 39 suites / 464 tests; 97.92 / 95.69 / 96.18 / 98.37.)*
+- [X] T040 Run `back-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % for touched code. *(Verified: lint + build clean; 54 suites / 501 tests; 96.39 / 90.73 / 100 / 96.21.)*
+- [X] T041 Validate `quickstart.md` scenarios 1–18 (sandbox manual runs for the happy path and declined/error cards only); confirm no provider company name and no secret was committed. *(Completed via T049; results recorded in `quickstart.md` → "Validation results".)*
 
 ---
 
@@ -237,3 +237,14 @@ Task: "Implement front-end/src/features/checkout/OrderSummary.tsx"
   edge cases.
 - Commit after each task or logical group using Conventional Commits.
 - Stop at any checkpoint to validate the story independently.
+
+---
+
+## Phase 7: Convergence
+
+**Purpose**: Close remaining gaps found after the US3 implementation pass, assessed against `spec.md`,
+`plan.md` and `.specify/memory/constitution.md`. Appended by `/speckit.converge`; no existing task was
+modified, renumbered or deleted.
+
+- [X] T048 Correct `front-end/README.md` so the payment description matches FR-023: state that the card is tokenized in the browser with the provider public key and never stored, and remove the "payment provider's hosted flow" claim (hosted widget is not used, D5); describe the app's API as the catalog **plus** the checkout-config, transaction-create, payment and status endpoints (no longer "read-only"); fix the ESLint note to say **both** `src/shared/api/http.ts` and `src/shared/api/payment-provider.ts` may call `fetch`; document the version-2 `checkout-progress` document and its `idempotencyKey`; and refresh the stale coverage table per FR-023 / plan: README touch-point / T037 (contradicts)
+- [X] T049 Execute and record the `quickstart.md` manual validation of scenarios 1–18 against the provider sandbox (happy path plus declined/error cards) and confirm the Definition of Done, including that no provider company name and no secret is committed per T041 (partial)

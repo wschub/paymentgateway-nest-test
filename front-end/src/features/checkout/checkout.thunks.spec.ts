@@ -5,6 +5,7 @@ import checkoutReducer, {
 import productReducer from '@/features/product/product.slice'
 import {
   createTransaction,
+  ensureIdempotencyKey,
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
@@ -561,5 +562,26 @@ describe('retryPurchase thunk', () => {
     expect(state.selectedProductId).toBe(PRODUCT_ID)
     expect(state.quantity).toBe(3)
     expect(state.delivery).toEqual(DELIVERY_RESTORED)
+  })
+})
+
+describe('ensureIdempotencyKey thunk', () => {
+  it('generates a key matching the pattern when none exists', async () => {
+    const store = makeStore(startedCheckout())
+
+    const key = await store.dispatch(ensureIdempotencyKey()).unwrap()
+
+    expect(key).toMatch(IDEMPOTENCY_KEY_PATTERN)
+    expect(store.getState().checkout.idempotencyKey).toBe(key)
+  })
+
+  it('reuses the existing key instead of generating a new one', async () => {
+    const store = makeStore(fullyStartedCheckout())
+    const previous = store.getState().checkout.idempotencyKey
+
+    const key = await store.dispatch(ensureIdempotencyKey()).unwrap()
+
+    expect(key).toBe(previous)
+    expect(store.getState().checkout.idempotencyKey).toBe(previous)
   })
 })

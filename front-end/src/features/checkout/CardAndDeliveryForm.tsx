@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useAppDispatch } from '@/app/hooks'
 import { createTransaction } from '@/features/checkout/checkout.thunks'
 import {
@@ -14,9 +14,11 @@ import type {
   CheckoutConfig,
   TransactionView,
 } from '@/features/checkout/checkout.types'
+import { describePaymentError } from '@/features/checkout/payment-errors'
 import { tokenizeCard } from '@/shared/api/payment-provider'
 import { isApiError } from '@/shared/api/http'
-import type { ApiError } from '@/shared/api/api.errors'
+import { createApiError, type ApiError } from '@/shared/api/api.errors'
+import { LiveRegion } from '@/shared/ui/LiveRegion'
 
 export interface CardAndDeliveryFormResult {
   transaction: TransactionView
@@ -32,6 +34,8 @@ export interface CardAndDeliveryFormProps {
   productId: string
   quantity: number
   onCreated: (result: CardAndDeliveryFormResult) => void
+  /** An error handed back by the modal (e.g. an `invalidToken` at Pagar). */
+  error?: ApiError | null
 }
 
 const EMPTY_DELIVERY: DeliveryData = {
@@ -55,6 +59,7 @@ export function CardAndDeliveryForm({
   productId,
   quantity,
   onCreated,
+  error = null,
 }: CardAndDeliveryFormProps) {
   const dispatch = useAppDispatch()
   const fieldId = useId()
@@ -68,6 +73,7 @@ export function CardAndDeliveryForm({
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<ApiError | null>(null)
+  const submittingRef = useRef(false)
 
   const deliveryErrors = validateDelivery(delivery)
   const cardErrors = validateCard({ ...card, installments }, config.installments.max)
@@ -77,6 +83,43 @@ export function CardAndDeliveryForm({
       : null
 
   const show = (field: string) => touched[field] || submitted
+
+  const fieldError = (field: string, message?: string) => {
+    const visible = Boolean(message && show(field))
+    return {
+      message: visible ? (message as string) : undefined,
+      attributes: {
+        'aria-invalid': visible || undefined,
+        'aria-describedby': visible ? `${fieldId}-${field}-error` : undefined,
+      },
+    }
+  }
+
+  const firstFieldError = (
+    [
+      ['fullName', deliveryErrors.fullName],
+      ['email', deliveryErrors.email],
+      ['phone', deliveryErrors.phone],
+      ['address', deliveryErrors.address],
+      ['city', deliveryErrors.city],
+      ['region', deliveryErrors.region],
+      ['notes', deliveryErrors.notes],
+      ['number', cardErrors.number],
+      ['expiry', cardErrors.expiry],
+      ['cvc', cardErrors.cvc],
+      ['cardholder', cardErrors.cardholder],
+      ['installments', cardErrors.installments],
+    ] as Array<[string, string | undefined]>
+  ).find(([field, message]) => Boolean(message && show(field)))?.[1]
+
+  const handedBack = describePaymentError(error)
+  const formErrorGuidance = describePaymentError(formError)
+  const announcement =
+    formErrorGuidance?.message ??
+    contractsError ??
+    (firstFieldError ? 'Revisa los campos marcados para continuar.' : null) ??
+    handedBack?.message ??
+    ''
 
   const updateDelivery = (patch: Partial<DeliveryData>) => {
     const next = { ...delivery, ...patch }
@@ -93,7 +136,7 @@ export function CardAndDeliveryForm({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (submitting) return
+    if (submittingRef.current) return
     setSubmitted(true)
     setFormError(null)
 
@@ -105,16 +148,14 @@ export function CardAndDeliveryForm({
       return
     }
     if (!idempotencyKey) {
-      setFormError({
-        kind: 'badRequest',
-        message: 'No pudimos iniciar la compra. Cierra e inténtalo de nuevo.',
-      })
+      setFormError(createApiError('badRequest'))
       return
     }
 
     const expiry = parseExpiry(card.expiry)
     if (!expiry) return
 
+    submittingRef.current = true
     setSubmitting(true)
     const token = await tokenizeCard({
       baseUrl: config.baseUrl,
@@ -129,6 +170,7 @@ export function CardAndDeliveryForm({
     })
     if (isApiError(token)) {
       setFormError(token)
+      submittingRef.current = false
       setSubmitting(false)
       return
     }
@@ -137,10 +179,11 @@ export function CardAndDeliveryForm({
       createTransaction({ idempotencyKey, productId, quantity, delivery }),
     )
       .unwrap()
-      .catch((error: ApiError) => error)
+      .catch((created: ApiError) => created)
 
     if (isApiError(outcome)) {
       setFormError(outcome)
+      submittingRef.current = false
       setSubmitting(false)
       return
     }
@@ -154,11 +197,25 @@ export function CardAndDeliveryForm({
       lastFour: token.lastFour,
       installments,
     })
+    submittingRef.current = false
     setSubmitting(false)
   }
 
+  const fullName = fieldError('fullName', deliveryErrors.fullName)
+  const email = fieldError('email', deliveryErrors.email)
+  const phone = fieldError('phone', deliveryErrors.phone)
+  const address = fieldError('address', deliveryErrors.address)
+  const city = fieldError('city', deliveryErrors.city)
+  const region = fieldError('region', deliveryErrors.region)
+  const notes = fieldError('notes', deliveryErrors.notes)
+  const cardNumber = fieldError('number', cardErrors.number)
+  const cardExpiry = fieldError('expiry', cardErrors.expiry)
+  const cardCvc = fieldError('cvc', cardErrors.cvc)
+  const cardholder = fieldError('cardholder', cardErrors.cardholder)
+  const installmentsField = fieldError('installments', cardErrors.installments)
+
   const errorText = (field: string, message?: string) =>
-    message && show(field) ? (
+    message ? (
       <p id={`${fieldId}-${field}-error`} className="text-sm font-medium text-red-700">
         {message}
       </p>
@@ -166,7 +223,9 @@ export function CardAndDeliveryForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-      <fieldset className="flex flex-col gap-3">
+      <LiveRegion politeness="assertive" message={announcement} />
+
+      <fieldset className="flex min-w-0 flex-col gap-3">
         <legend className="text-base font-semibold text-gray-900">Entrega</legend>
 
         <label htmlFor={`${fieldId}-fullName`} className="flex flex-col gap-1 text-sm text-gray-700">
@@ -178,9 +237,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ fullName: e.target.value })}
             onBlur={() => markTouched('fullName')}
             autoComplete="name"
+            {...fullName.attributes}
           />
         </label>
-        {errorText('fullName', deliveryErrors.fullName)}
+        {errorText('fullName', fullName.message)}
 
         <label htmlFor={`${fieldId}-email`} className="flex flex-col gap-1 text-sm text-gray-700">
           Correo electrónico
@@ -192,9 +252,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ email: e.target.value })}
             onBlur={() => markTouched('email')}
             autoComplete="email"
+            {...email.attributes}
           />
         </label>
-        {errorText('email', deliveryErrors.email)}
+        {errorText('email', email.message)}
 
         <label htmlFor={`${fieldId}-phone`} className="flex flex-col gap-1 text-sm text-gray-700">
           Teléfono
@@ -205,9 +266,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ phone: e.target.value })}
             onBlur={() => markTouched('phone')}
             autoComplete="tel"
+            {...phone.attributes}
           />
         </label>
-        {errorText('phone', deliveryErrors.phone)}
+        {errorText('phone', phone.message)}
 
         <label htmlFor={`${fieldId}-address`} className="flex flex-col gap-1 text-sm text-gray-700">
           Dirección
@@ -218,9 +280,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ address: e.target.value })}
             onBlur={() => markTouched('address')}
             autoComplete="street-address"
+            {...address.attributes}
           />
         </label>
-        {errorText('address', deliveryErrors.address)}
+        {errorText('address', address.message)}
 
         <label htmlFor={`${fieldId}-city`} className="flex flex-col gap-1 text-sm text-gray-700">
           Ciudad
@@ -231,9 +294,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ city: e.target.value })}
             onBlur={() => markTouched('city')}
             autoComplete="address-level2"
+            {...city.attributes}
           />
         </label>
-        {errorText('city', deliveryErrors.city)}
+        {errorText('city', city.message)}
 
         <label htmlFor={`${fieldId}-region`} className="flex flex-col gap-1 text-sm text-gray-700">
           Departamento
@@ -244,9 +308,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateDelivery({ region: e.target.value })}
             onBlur={() => markTouched('region')}
             autoComplete="address-level1"
+            {...region.attributes}
           />
         </label>
-        {errorText('region', deliveryErrors.region)}
+        {errorText('region', region.message)}
 
         <label htmlFor={`${fieldId}-notes`} className="flex flex-col gap-1 text-sm text-gray-700">
           Notas (opcional)
@@ -256,12 +321,13 @@ export function CardAndDeliveryForm({
             value={delivery.notes ?? ''}
             onChange={(e) => updateDelivery({ notes: e.target.value })}
             onBlur={() => markTouched('notes')}
+            {...notes.attributes}
           />
         </label>
-        {errorText('notes', deliveryErrors.notes)}
+        {errorText('notes', notes.message)}
       </fieldset>
 
-      <fieldset className="flex flex-col gap-3">
+      <fieldset className="flex min-w-0 flex-col gap-3">
         <legend className="text-base font-semibold text-gray-900">Tarjeta</legend>
 
         <label htmlFor={`${fieldId}-number`} className="flex flex-col gap-1 text-sm text-gray-700">
@@ -274,9 +340,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateCard({ number: e.target.value })}
             onBlur={() => markTouched('number')}
             autoComplete="cc-number"
+            {...cardNumber.attributes}
           />
         </label>
-        {errorText('number', cardErrors.number)}
+        {errorText('number', cardNumber.message)}
 
         <label htmlFor={`${fieldId}-expiry`} className="flex flex-col gap-1 text-sm text-gray-700">
           Vencimiento (MM/AA)
@@ -288,9 +355,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateCard({ expiry: e.target.value })}
             onBlur={() => markTouched('expiry')}
             autoComplete="cc-exp"
+            {...cardExpiry.attributes}
           />
         </label>
-        {errorText('expiry', cardErrors.expiry)}
+        {errorText('expiry', cardExpiry.message)}
 
         <label htmlFor={`${fieldId}-cvc`} className="flex flex-col gap-1 text-sm text-gray-700">
           CVC
@@ -302,9 +370,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateCard({ cvc: e.target.value })}
             onBlur={() => markTouched('cvc')}
             autoComplete="cc-csc"
+            {...cardCvc.attributes}
           />
         </label>
-        {errorText('cvc', cardErrors.cvc)}
+        {errorText('cvc', cardCvc.message)}
 
         <label htmlFor={`${fieldId}-cardholder`} className="flex flex-col gap-1 text-sm text-gray-700">
           Nombre del titular
@@ -315,9 +384,10 @@ export function CardAndDeliveryForm({
             onChange={(e) => updateCard({ cardholder: e.target.value })}
             onBlur={() => markTouched('cardholder')}
             autoComplete="cc-name"
+            {...cardholder.attributes}
           />
         </label>
-        {errorText('cardholder', cardErrors.cardholder)}
+        {errorText('cardholder', cardholder.message)}
 
         <label htmlFor={`${fieldId}-installments`} className="flex flex-col gap-1 text-sm text-gray-700">
           Cuotas
@@ -330,6 +400,7 @@ export function CardAndDeliveryForm({
               setInstallments(value)
               dispatch(installmentsChanged(value))
             }}
+            {...installmentsField.attributes}
           >
             {Array.from({ length: config.installments.max }, (_, index) => index + 1).map(
               (option) => (
@@ -340,10 +411,10 @@ export function CardAndDeliveryForm({
             )}
           </select>
         </label>
-        {errorText('installments', cardErrors.installments)}
+        {errorText('installments', installmentsField.message)}
       </fieldset>
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className="flex min-w-0 flex-col gap-2">
         <legend className="text-base font-semibold text-gray-900">Contratos</legend>
 
         <label className="flex items-start gap-2 text-sm text-gray-700">
@@ -395,16 +466,24 @@ export function CardAndDeliveryForm({
         </label>
 
         {contractsError ? (
-          <p role="alert" className="text-sm font-medium text-red-700">
-            {contractsError}
-          </p>
+          <p className="text-sm font-medium text-red-700">{contractsError}</p>
         ) : null}
       </fieldset>
 
-      {formError ? (
-        <p role="alert" className="text-sm font-medium text-red-700">
-          {formError.message}
-        </p>
+      {formErrorGuidance ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-red-700">
+            {formErrorGuidance.message}
+          </p>
+          {formErrorGuidance.action !== 'retry' ? (
+            <p className="text-sm text-gray-700">{formErrorGuidance.actionLabel}</p>
+          ) : null}
+        </div>
+      ) : !formError && handedBack ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-red-700">{handedBack.message}</p>
+          <p className="text-sm text-gray-700">{handedBack.actionLabel}</p>
+        </div>
       ) : null}
 
       <button

@@ -1,9 +1,13 @@
 # Tech Store — Front-end
 
 A small storefront for browsing a technology-accessory catalog, opening a
-product, choosing a quantity and starting a purchase. It is a single-page
-React application that consumes a read-only product API; payment itself is
-delegated to a **payment provider** and no card data is ever handled here.
+product, choosing a quantity and completing a purchase. It is a single-page
+React application that consumes the back-end API for the catalog
+(`GET /products`, `GET /products/:id`) and for checkout
+(`GET /payments/checkout-config`, `POST /transactions`,
+`POST /transactions/:id/payment`, `GET /transactions/:id`). Payment runs
+against a **payment provider**: the card is **tokenized in the browser** with
+the provider's public key, and the card number and CVC are **never stored**.
 
 ## Features
 
@@ -12,8 +16,18 @@ delegated to a **payment provider** and no card data is ever handled here.
   opened. Loading, empty and error-with-retry states are covered.
 - **Product** (`/product/:id`): product details, a quantity selector bounded by
   `1 .. min(stock, 10)`, and an "Iniciar compra" button that records the choice
-  and shows the next-step placeholder. Removed or 0-stock products block the
-  purchase.
+  and opens the checkout modal (see below). Removed or 0-stock products block
+  the purchase.
+- **Checkout & payment**: "Iniciar compra" opens the card-and-delivery modal
+  with steps `cardAndDelivery → summary → finalStatus`. **Continuar** validates
+  the delivery and card data and the two contracts, tokenizes the card in the
+  browser and creates the `PENDING` purchase; the **summary** shows the
+  server-computed amounts and **Pagar** starts the payment. The modal then
+  polls the back-end status until it is final and survives a refresh
+  mid-payment (it re-reads the real status instead of charging again). Every
+  edge case — sold out, declined, invalid/expired token, provider unavailable,
+  timeout/`PENDING`, a retried idempotency key and amount tampering — shows a
+  clear, non-technical message and never double-charges.
 - **Re-reads**: the gallery re-reads on mount and whenever the tab becomes
   visible again; the product page additionally re-reads right before the
   purchase choice is recorded. If stock shrank, the shopper is told through a
@@ -48,15 +62,22 @@ npm run test:cov# run the suite with coverage
 ## Configuration
 
 The app reads a single build-time variable, `VITE_API_URL`, which is the base
-URL of the back-end API (`GET /products`, `GET /products/:id`). Vite inlines
+URL of the back-end API (`GET /products`, `GET /products/:id`,
+`GET /payments/checkout-config`, `POST /transactions`,
+`POST /transactions/:id/payment`, `GET /transactions/:id`). Vite inlines
 `VITE_`-prefixed variables at build time, so it is not a runtime secret.
 
 - Copy `.env.example` to `.env.local` and set `VITE_API_URL`. Leave it empty to
   keep the app offline; API calls then resolve to a friendly error state.
+- The provider base URL and public key are **not** build-time variables: they
+  come from `GET /payments/checkout-config` at runtime (public values only, no
+  secret in the front-end).
 - `VITE_API_URL` is read **only** inside `src/config.ts`. That file is the
-  configuration seam: nothing else in `src/` may read `import.meta`, and only
-  `src/shared/api/http.ts` may call `fetch`. Both rules are enforced by ESLint
-  and verified by `src/__tests__/eslint-restrictions.spec.ts`.
+  configuration seam: nothing else in `src/` may read `import.meta`.
+- Only `src/shared/api/http.ts` (our API) and
+  `src/shared/api/payment-provider.ts` (browser card tokenization) may call
+  `fetch`. Both rules are enforced by ESLint and verified by
+  `src/__tests__/eslint-restrictions.spec.ts`.
 
 ## Imports
 
@@ -70,14 +91,18 @@ import { httpRequest } from '@/shared/api/http'
 ## Persistence contract
 
 An in-progress purchase survives a reload through a single `localStorage` key,
-`checkout-progress`. The stored document is versioned and expires after 24
-hours. Only the purchase *progress* is persisted: the current step, the
-selected product id, the quantity, the delivery details (a fixed whitelist) and
-the transaction id.
+`checkout-progress`. The stored document is **versioned (version 2)** and
+expires after 24 hours; a document whose version does not match is discarded on
+load. Only the non-sensitive purchase *progress* is persisted: the current step,
+the selected product id, the quantity, the delivery details (a fixed whitelist),
+the transaction id/reference/status and the **idempotency key** (16–64 chars of
+`[A-Za-z0-9_-]`). The single-use card token is **not** part of this document.
 
 **Card data never enters application state or storage.** There is no card
-number, CVC or expiry field anywhere in the codebase; those values live only in
-the payment provider's hosted flow.
+number, CVC or expiry field anywhere in the codebase: the card is **tokenized
+in the browser with the public key and never stored** (a provider-hosted widget
+or hosted checkout page is not used), and only the single-use token — held in
+memory — plus the card brand and last four are ever used.
 
 The full contract (shape, versioning, expiry and validation rules) is documented
 in [`../specs/003-front-end-store/contracts/persistence.md`](../specs/003-front-end-store/contracts/persistence.md).
@@ -88,12 +113,12 @@ in [`../specs/003-front-end-store/contracts/persistence.md`](../specs/003-front-
 
 | Metric     | Coverage |
 | ---------- | -------- |
-| Statements | 99.65%   |
-| Branches   | 97.84%   |
-| Functions  | 100%     |
-| Lines      | 99.64%   |
+| Statements | 97.92%   |
+| Branches   | 95.69%   |
+| Functions  | 96.18%   |
+| Lines      | 98.37%   |
 
-(28 suites / 236 tests at the time of writing.)
+(39 suites / 464 tests at the time of writing.)
 
 ### Checking the 375×667 layout
 

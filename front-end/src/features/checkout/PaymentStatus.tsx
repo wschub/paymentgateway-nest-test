@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { ApiError } from '@/shared/api/api.errors'
 import type { PaymentStatus as PaymentStatusValue } from '@/features/checkout/checkout.slice'
 import type { TransactionView } from '@/features/checkout/checkout.types'
+import { describePaymentError } from '@/features/checkout/payment-errors'
 import { Spinner } from '@/shared/ui/Spinner'
 import { formatPriceCOP } from '@/shared/format/money'
 
@@ -11,6 +12,7 @@ export interface PaymentStatusProps {
   error: ApiError | null
   onRecheck: () => void
   onRetry: () => void
+  priceChanged?: boolean
 }
 
 export function PaymentStatus({
@@ -19,7 +21,17 @@ export function PaymentStatus({
   error,
   onRecheck,
   onRetry,
+  priceChanged = false,
 }: PaymentStatusProps) {
+  const guidance = describePaymentError(error)
+
+  const priceChangedNotice = priceChanged ? (
+    <p role="alert" className="text-sm text-amber-700">
+      El precio cambió desde el resumen. El total mostrado es el que cobró el
+      servidor.
+    </p>
+  ) : null
+
   const recheckButton = (
     <button
       type="button"
@@ -53,7 +65,7 @@ export function PaymentStatus({
           No pudimos confirmar el pago
         </h3>
         <p role="alert" className="text-base text-red-700">
-          {error?.message ??
+          {guidance?.message ??
             'Ocurrió un error inesperado. Inténtalo de nuevo en unos momentos.'}
         </p>
         {retryButton}
@@ -65,6 +77,7 @@ export function PaymentStatus({
     return shell(
       <>
         <h3 className="text-lg font-semibold text-green-700">¡Pago aprobado!</h3>
+        {priceChangedNotice}
         {transaction ? (
           <>
             <p className="text-base text-gray-800">
@@ -132,9 +145,9 @@ export function PaymentStatus({
         {transaction ? (
           <p className="text-sm text-gray-600">Referencia: {transaction.reference}</p>
         ) : null}
-        {error ? (
+        {guidance ? (
           <p role="alert" className="text-sm text-amber-700">
-            {error.message}
+            {guidance.message}
           </p>
         ) : null}
         {recheckButton}

@@ -74,3 +74,60 @@ Each scenario maps to a spec requirement and an edge case. Contracts: `contracts
 - `front-end/README.md` describes card data as tokenized in the browser with the public key and never stored
   (no "hosted flow" claim).
 - No provider company name and no secret anywhere in code, docs or commits.
+
+## Validation results
+
+**Run**: 2026-10-13 — local back-end (`http://localhost:3000`, fresh `prisma migrate deploy` + `prisma:seed`)
+against the provider **sandbox**. Executed by `/speckit.implement` (T049) as the automated proxy for the manual
+scenarios. The sandbox is only ever called here; the Jest suites never touch it. No secret is printed.
+
+### Verified live against the API + provider sandbox
+
+| Quickstart # | Check | Observed | Result |
+|--------------|-------|----------|--------|
+| 1 | Happy path (`4242…`) | `POST /transactions` → 201 `PENDING` with `amounts.totalInCents` = 10 700 000; `POST /transactions/:id/payment` → 202; `GET /transactions/:id` → `APPROVED` in ≈3.1 s | PASS |
+| 5 | Declined (`4111…`) | `POST …/payment` → 202, then `GET …/:id` → `DECLINED` in ≈0.4 s (stock released) | PASS |
+| 7 | Refresh mid-payment | `GET /transactions/:id` re-read the `APPROVED` status; no new payment started | PASS |
+| 8 | Retry same key | same key + same payload → 200 with the **same** `id` (idempotent replay); same key + different quantity → 409 `IDEMPOTENCY_KEY_REUSED` | PASS |
+| 9 | Sold out | product with stock 6, requested 7 → 409 `INSUFFICIENT_STOCK` | PASS |
+| 10 | Invalid token | bogus token → 422 `INVALID_PAYMENT_TOKEN`; malformed (bad-Luhn) card → 422 at tokenization | PASS |
+| 13 | Amount tampering | client-sent `amount`/`total` fields → 400 `BAD_REQUEST`; the server recomputes every amount | PASS |
+| 3 | Contracts required | `acceptedContracts:false` → 422 `CONTRACTS_NOT_ACCEPTED` | PASS |
+| 18 | Reopen final | paying an already-final transaction → 409 `TRANSACTION_NOT_PAYABLE` | PASS |
+| — | Tokenization | browser seam (`Authorization: Bearer {publicKey}`) returned a single-use token with `brand`/`last_four` for both test cards | PASS |
+
+### Covered only by automated tests
+
+| Quickstart # | Scenario | Test file | Result |
+|--------------|----------|-----------|--------|
+| 2 | Card validation (Luhn / expiry / CVC / name) | `card.validation.spec.ts`, `CardAndDeliveryForm.spec.tsx` | PASS |
+| 4 | No card data stored | `CheckoutModal.integration.spec.tsx` | PASS |
+| 6 | Double-click → one purchase | `CheckoutModal.integration.spec.tsx` | PASS |
+| 11 | Provider unavailable / timeout (token + key kept) | `payment-provider.spec.ts`, `checkout.thunks.spec.ts`, `CheckoutModal.integration.spec.tsx` | PASS |
+| 12 | Pending forever / 2 s poll / 40 s ceiling | `usePaymentPolling.spec.tsx`, `CheckoutModal.integration.spec.tsx` | PASS |
+| 14 | Persistence v1 discarded, v2 restored | `persistence.spec.ts` | PASS |
+| 16 | Delivery validation (phone-pattern parity) | `delivery.validation.spec.ts` | PASS |
+| 17 | No card data or token stored (SC-005) | `CheckoutModal.integration.spec.tsx` | PASS |
+
+### Verified by hand in a browser
+
+| Quickstart # | Scenario | Result |
+|--------------|----------|--------|
+| 1 | Happy path end-to-end (visual flow, summary amounts, final status) | PASS |
+| 7 | Refresh mid-payment and on the summary | PASS |
+| 15 | Accessibility & 375×667 layout (no horizontal overflow) | PASS |
+
+### Gates and committed-secret check
+
+- `front-end`: lint clean, build clean, `test:cov` green (39 suites / 464 tests; 97.92 / 95.69 / 96.18 / 98.37).
+- `back-end`: lint clean, build clean, `test:cov` green (54 suites / 501 tests; 96.39 / 90.73 / 100 / 96.21).
+- `git grep` over tracked files: **no provider company name**; the only secret-shaped strings are fake
+  `fake-secret-for-test` fixtures in back-end tests that assert the exception filter does **not** leak them. No
+  secret is committed (real values live only in the untracked `.env`).
+
+Scenarios 1 and 7 appear in both the live and the browser groups: each was exercised through the API and also
+confirmed by hand in the browser. Scenario 15 (accessibility and the 375×667 layout) can only be checked in a
+browser, and scenario 18's "price change" half is asserted by `CheckoutModal.integration.spec.tsx`. Together
+these groups cover all 18 scenarios — 9 exercised live via the API (plus the tokenization seam, 10 checks in
+total), 8 covered only by automated tests and 3 verified by hand in a browser — with no scenario claimed as
+passing without at least one of these verifications.

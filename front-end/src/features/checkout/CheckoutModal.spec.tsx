@@ -272,10 +272,46 @@ describe('CheckoutModal', () => {
     )
   })
 
-  it('discards the card token and returns to the card entry step on a rejected payment', async () => {
+  it('keeps the summary and the token when the provider rejects the payment so it can be retried', async () => {
     const user = userEvent.setup()
-    successRoutes(createApiError('providerRejected'))
+    let paymentAttempts = 0
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      paymentAttempts += 1
+      if (paymentAttempts === 1) {
+        return Promise.resolve(createApiError('providerRejected'))
+      }
+      return Promise.resolve(paidTransaction)
+    })
     renderModal()
+
+    await reachSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no fue aprobado/i)
+    expect(
+      screen.getByRole('heading', { name: 'Resumen de la compra' }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Estado del pago' }),
+    ).toBeInTheDocument()
+    const paymentCalls = mockedHttpRequest.mock.calls.filter(([path]) =>
+      String(path).endsWith('/payment'),
+    )
+    expect(paymentCalls).toHaveLength(2)
+    expect(paymentCalls[1][1]).toEqual({
+      method: 'POST',
+      body: { cardToken: 'tok_1', installments: 2, acceptedContracts: true },
+    })
+  })
+
+  it('goes back to the card form with the same transaction and key on an invalid token', async () => {
+    const user = userEvent.setup()
+    successRoutes(createApiError('invalidToken'))
+    const { store } = renderModal()
 
     await reachSummary(user)
     await user.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
@@ -283,9 +319,84 @@ describe('CheckoutModal', () => {
     expect(
       await screen.findByRole('heading', { name: 'Datos de pago y entrega' }),
     ).toBeInTheDocument()
+    const state = store.getState().checkout
+    expect(state.currentStep).toBe('cardAndDelivery')
+    expect(state.transactionId).toBe(TRANSACTION_ID)
+    expect(state.idempotencyKey).toBe('key-123')
+    expect(mockFormProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ kind: 'invalidToken' }),
+      }),
+    )
+  })
+
+  it('shows the current status instead of starting a new payment when the purchase is not payable', async () => {
+    const user = userEvent.setup()
+    const staleTransaction = { ...paidTransaction, status: 'VOIDED' as const }
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      if (String(path).endsWith('/payment')) {
+        return Promise.resolve(createApiError('notPayable'))
+      }
+      return Promise.resolve(staleTransaction)
+    })
+    renderModal()
+
+    await reachSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
+
     expect(
-      screen.getByRole('button', { name: 'Continuar (simulado)' }),
+      await screen.findByRole('heading', { name: 'Estado del pago' }),
     ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Compra anulada' })).toBeInTheDocument(),
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Pagar (simulado)' }),
+    ).not.toBeInTheDocument()
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) =>
+        String(path).endsWith('/payment'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('starts a brand new purchase when the idempotency key can no longer continue', async () => {
+    const user = userEvent.setup()
+    successRoutes(createApiError('idempotencyConflict'))
+    const { store } = renderModal()
+
+    await reachSummary(user)
+    await user.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Continuar (simulado)' }),
+    ).toBeInTheDocument()
+    const state = store.getState().checkout
+    expect(state.currentStep).toBe('cardAndDelivery')
+    expect(state.transactionId).toBeNull()
+    expect(state.idempotencyKey).not.toBe('key-123')
+  })
+
+  it('calls the payment endpoint once when Pagar is double-clicked', async () => {
+    const user = userEvent.setup()
+    successRoutes(paidTransaction)
+    renderModal()
+
+    await reachSummary(user)
+    const payButton = screen.getByRole('button', { name: 'Pagar (simulado)' })
+
+    fireEvent.click(payButton)
+    fireEvent.click(payButton)
+
+    expect(
+      await screen.findByRole('heading', { name: 'Estado del pago' }),
+    ).toBeInTheDocument()
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) =>
+        String(path).endsWith('/payment'),
+      ),
+    ).toHaveLength(1)
   })
 
   it('closes the modal and hides the dialog', async () => {
@@ -297,6 +408,19 @@ describe('CheckoutModal', () => {
     await user.click(screen.getByRole('button', { name: 'Cerrar' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('bounds the dialog to the viewport so a 375 px screen has no horizontal overflow', async () => {
+    successRoutes(paidTransaction)
+    renderModal()
+
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    const dialog = document.querySelector('dialog') as HTMLDialogElement
+
+    // Width is the viewport minus a small gutter and capped on wide screens.
+    expect(dialog.className).toContain('w-[calc(100vw-2rem)]')
+    expect(dialog.className).toContain('max-w-lg')
+    expect(dialog.className).toContain('overflow-x-hidden')
   })
 
   it('closes the native dialog when the open prop becomes false', async () => {

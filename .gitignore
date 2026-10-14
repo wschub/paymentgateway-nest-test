@@ -10,8 +10,13 @@ coverage/
 *.log
 back-end/src/generated/
 temp.txt
-commands.txt*.tsbuildinfo
+*.tsbuildinfo
 commands.txt
 temp.txt
 HANDOFF.md
 prod-smoke.sh
+
+#agents
+.gemini/
+.specify/integrations/gemini.manifest.json
+.vscode/

@@ -98,6 +98,7 @@ describe('loadPersistedProgress', () => {
         region: 'Cundinamarca',
       },
       transactionId: 'tx-1',
+      idempotencyKey: 'Abcdefghijklmnop1234',
     })
     const { storage } = createFakeStorage({ [PERSISTENCE_STORAGE_KEY]: JSON.stringify(stored) })
 
@@ -110,8 +111,20 @@ describe('loadPersistedProgress', () => {
       quantity: 3,
       delivery: stored.delivery,
       transactionId: 'tx-1',
-      idempotencyKey: null,
+      idempotencyKey: 'Abcdefghijklmnop1234',
     })
+  })
+
+  it('keeps a purchase beyond the product step when its idempotency key is present', () => {
+    const stored = validStored({
+      currentStep: 'cardAndDelivery',
+      idempotencyKey: 'Abcdefghijklmnop1234',
+    })
+    const { storage } = createFakeStorage({
+      [PERSISTENCE_STORAGE_KEY]: JSON.stringify(stored),
+    })
+
+    expect(loadPersistedProgress(storage)?.currentStep).toBe('cardAndDelivery')
   })
 
   it('loads a valid idempotency key from a version-2 document', () => {

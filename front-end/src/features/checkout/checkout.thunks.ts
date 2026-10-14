@@ -71,6 +71,25 @@ export const retryPurchase = createAsyncThunk<
   dispatch(retryAfterFinal())
 })
 
+/**
+ * Ensures a single idempotency key exists for the in-progress purchase,
+ * generating one only when there is none. Retries keep reusing the same key
+ * until a final DECLINED/VOIDED/ERROR outcome clears it (`retryPurchase`).
+ */
+export const ensureIdempotencyKey = createAsyncThunk<
+  string,
+  void,
+  { state: RestoreProgressState }
+>('checkout/ensureIdempotencyKey', async (_arg, { getState, dispatch }) => {
+  const existing = getState().checkout.idempotencyKey
+  if (existing) {
+    return existing
+  }
+  const key = generateIdempotencyKey()
+  dispatch(idempotencyKeySet(key))
+  return key
+})
+
 export const loadCheckoutConfig = createAsyncThunk<
   CheckoutConfig,
   void,

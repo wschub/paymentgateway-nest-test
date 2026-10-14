@@ -121,7 +121,7 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('answers an unexpected error with a generic body without a stack', () => {
-    const body = catchException(new Error('secret key sk_live_123'), '/products');
+    const body = catchException(new Error('secret key fake-secret-for-test'), '/products');
 
     expect(Object.keys(body).sort()).toEqual([
       'code',
@@ -133,7 +133,7 @@ describe('AllExceptionsFilter', () => {
     expect(body.statusCode).toBe(500);
     expect(body.code).toBe('INTERNAL_ERROR');
     expect(body.message).toBe('Internal server error');
-    expect(JSON.stringify(body)).not.toContain('sk_live_123');
+    expect(JSON.stringify(body)).not.toContain('fake-secret-for-test');
   });
 
   it('answers a raw database failure without any Prisma text', () => {
@@ -170,7 +170,7 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('logs the original 500 exception at error level with its cause chain, without leaking it into the body', () => {
-    const original = new Error('hunter2 secret key sk_live_123 expired');
+    const original = new Error('hunter2 secret key fake-secret-for-test expired');
     original.name = 'SecretsError';
     Object.defineProperty(original, 'stack', { value: undefined });
     original.cause = new Error('connect ECONNREFUSED 127.0.0.1:5432');
@@ -182,14 +182,14 @@ describe('AllExceptionsFilter', () => {
     const [logged, chain] = errorSpy.mock.calls[0] as [unknown, string];
     expect(logged).toBe(original);
     expect(chain).toContain('SecretsError');
-    expect(chain).toContain('hunter2 secret key sk_live_123 expired');
+    expect(chain).toContain('hunter2 secret key fake-secret-for-test expired');
     expect(chain).toContain('Caused by');
     expect(chain).toContain('DbConnectionError');
     expect(chain).toContain('connect ECONNREFUSED');
 
     expect(body.statusCode).toBe(500);
     expect(JSON.stringify(body)).not.toContain('hunter2');
-    expect(JSON.stringify(body)).not.toContain('sk_live_123');
+    expect(JSON.stringify(body)).not.toContain('fake-secret-for-test');
     expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
     expect(JSON.stringify(body)).not.toContain('SecretsError');
   });

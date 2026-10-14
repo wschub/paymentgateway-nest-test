@@ -1,4 +1,5 @@
 import type { TransactionView } from '@/features/checkout/checkout.types'
+import { describePaymentError } from '@/features/checkout/payment-errors'
 import { formatPriceCOP } from '@/shared/format/money'
 import type { ApiError } from '@/shared/api/api.errors'
 
@@ -35,6 +36,7 @@ export function OrderSummary({
   onPay,
 }: OrderSummaryProps) {
   const { amounts, product, card, delivery } = transaction
+  const guidance = describePaymentError(error)
 
   return (
     <div className="flex flex-col gap-5">
@@ -63,10 +65,15 @@ export function OrderSummary({
         <AmountRow label="Total" cents={amounts.totalInCents} emphasis />
       </dl>
 
-      {error ? (
-        <p role="alert" className="text-sm font-medium text-red-700">
-          {error.message}
-        </p>
+      {guidance ? (
+        <div className="flex flex-col gap-1">
+          <p role="alert" className="text-sm font-medium text-red-700">
+            {guidance.message}
+          </p>
+          {guidance.action !== 'retry' ? (
+            <p className="text-sm text-gray-700">{guidance.actionLabel}</p>
+          ) : null}
+        </div>
       ) : null}
 
       <button

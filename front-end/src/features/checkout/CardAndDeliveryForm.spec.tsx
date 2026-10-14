@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { CardAndDeliveryForm, type CardAndDeliveryFormResult } from '@/features/checkout/CardAndDeliveryForm'
@@ -7,7 +7,7 @@ import type { CheckoutConfig, TransactionView } from '@/features/checkout/checko
 import { makeStore, type AppStore } from '@/app/store'
 import { tokenizeCard } from '@/shared/api/payment-provider'
 import { httpRequest } from '@/shared/api/http'
-import { createApiError } from '@/shared/api/api.errors'
+import { createApiError, type ApiError } from '@/shared/api/api.errors'
 
 jest.mock('@/shared/api/http', () => ({
   httpRequest: jest.fn(),
@@ -74,6 +74,7 @@ const VALID_CARD = {
 
 function renderForm(props: {
   idempotencyKey?: string | null
+  error?: ApiError | null
   onCreated?: (result: CardAndDeliveryFormResult) => void
 } = {}): AppStore {
   const store = makeStore()
@@ -86,6 +87,7 @@ function renderForm(props: {
         productId={PRODUCT_ID}
         quantity={QUANTITY}
         onCreated={onCreated}
+        error={props.error}
       />
     </Provider>
   )
@@ -243,7 +245,7 @@ describe('CardAndDeliveryForm', () => {
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: 'Continuar' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/No pudimos iniciar la compra/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/Revisa los datos ingresados/i)
     expect(mockedTokenizeCard).not.toHaveBeenCalled()
     expect(onCreated).not.toHaveBeenCalled()
   })
@@ -273,5 +275,101 @@ describe('CardAndDeliveryForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/datos de la tarjeta/i)
     expect(mockedHttpRequest).not.toHaveBeenCalled()
     expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('links each field error to its input with aria-describedby and aria-invalid', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.click(screen.getByRole('button', { name: 'Continuar' }))
+
+    const email = screen.getByLabelText('Correo electrónico')
+    expect(email).toHaveAttribute('aria-invalid', 'true')
+    const describedBy = email.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      /correo electrónico válido/i,
+    )
+
+    const phone = screen.getByLabelText('Teléfono')
+    expect(phone).toHaveAttribute('aria-invalid', 'true')
+    expect(document.getElementById(phone.getAttribute('aria-describedby')!)).toHaveTextContent(
+      /teléfono válido/i,
+    )
+  })
+
+  it('announces validation errors through an assertive live region', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <Provider store={makeStore()}>
+        <CardAndDeliveryForm
+          config={CONFIG}
+          idempotencyKey={IDEMPOTENCY_KEY}
+          productId={PRODUCT_ID}
+          quantity={QUANTITY}
+          onCreated={jest.fn()}
+        />
+      </Provider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Continuar' }))
+
+    const live = container.querySelector('[aria-live="assertive"]')
+    expect(live).not.toBeNull()
+    expect(live).toHaveTextContent(/aceptar ambos contratos|Revisa los campos/i)
+  })
+
+  it('shows a payment error handed back by the modal with its next action', () => {
+    renderForm({ error: createApiError('invalidToken') })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/datos de la tarjeta/i)
+    expect(screen.getByText(/Volver a ingresar la tarjeta/i)).toBeInTheDocument()
+  })
+
+  it('tokenizes and creates only once when Continuar is double-clicked', async () => {
+    const user = userEvent.setup()
+    const onCreated = jest.fn()
+    mockedHttpRequest.mockResolvedValue(TRANSACTION)
+    renderForm({ onCreated })
+
+    await fillValidForm(user)
+    const button = screen.getByRole('button', { name: 'Continuar' })
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+    expect(mockedTokenizeCard).toHaveBeenCalledTimes(1)
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => path === '/transactions'),
+    ).toHaveLength(1)
+  })
+
+  it('keeps every field full-width inside min-w-0 fieldsets so 375 px has no horizontal overflow', () => {
+    const { container } = render(
+      <Provider store={makeStore()}>
+        <CardAndDeliveryForm
+          config={CONFIG}
+          idempotencyKey={IDEMPOTENCY_KEY}
+          productId={PRODUCT_ID}
+          quantity={QUANTITY}
+          onCreated={jest.fn()}
+        />
+      </Provider>,
+    )
+
+    const fieldsets = container.querySelectorAll('fieldset')
+    expect(fieldsets.length).toBeGreaterThan(0)
+    fieldsets.forEach((fieldset) => {
+      expect(fieldset.className).toContain('min-w-0')
+    })
+
+    const inputs = container.querySelectorAll(
+      'input:not([type="checkbox"]):not([type="radio"]), select, textarea',
+    )
+    expect(inputs.length).toBeGreaterThan(0)
+    inputs.forEach((input) => {
+      expect(input.className).toContain('w-full')
+    })
   })
 })
