@@ -277,6 +277,7 @@ describe('checkout slice', () => {
     )
 
     expect(state.transaction).toEqual(view)
+    expect(state.transactionId).toBe(view.id)
     expect(state.paymentStatus).toBe('approved')
     expect(state.paymentError).toBeNull()
   })

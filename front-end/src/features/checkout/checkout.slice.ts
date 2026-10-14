@@ -169,6 +169,7 @@ export const checkoutSlice = createSlice({
     },
     transactionReceived(state, action: PayloadAction<TransactionView>) {
       state.transaction = action.payload
+      state.transactionId = action.payload.id
       state.paymentStatus = paymentStatusFromTransaction(action.payload.status)
       state.paymentError = null
     },
