@@ -81,7 +81,7 @@ Each scenario maps to a spec requirement and an edge case. Contracts: `contracts
 against the provider **sandbox**. Executed by `/speckit.implement` (T049) as the automated proxy for the manual
 scenarios. The sandbox is only ever called here; the Jest suites never touch it. No secret is printed.
 
-### Live sandbox checks
+### Verified live against the API + provider sandbox
 
 | Quickstart # | Check | Observed | Result |
 |--------------|-------|----------|--------|
@@ -96,25 +96,38 @@ scenarios. The sandbox is only ever called here; the Jest suites never touch it.
 | 18 | Reopen final | paying an already-final transaction → 409 `TRANSACTION_NOT_PAYABLE` | PASS |
 | — | Tokenization | browser seam (`Authorization: Bearer {publicKey}`) returned a single-use token with `brand`/`last_four` for both test cards | PASS |
 
-### Automated (Jest / static) checks
+### Covered only by automated tests
 
-| Quickstart # | Check | Covered by | Result |
-|--------------|-------|------------|--------|
-| 4, 17 | No card number/CVC in state, `localStorage` or our API; token memory-only | `CheckoutModal.integration.spec.tsx` (SC-005) | PASS |
-| 6 | Double-click → one purchase | modal + integration specs | PASS |
-| 11 | Provider unavailable / timeout (token + key kept) | `payment-provider.spec.ts`, `checkout.thunks.spec.ts`, integration spec | PASS |
-| 12 | 2 s poll / 40 s ceiling / manual re-check | `usePaymentPolling.spec.tsx`, integration spec | PASS |
+| Quickstart # | Scenario | Test file | Result |
+|--------------|----------|-----------|--------|
+| 2 | Card validation (Luhn / expiry / CVC / name) | `card.validation.spec.ts`, `CardAndDeliveryForm.spec.tsx` | PASS |
+| 4 | No card data stored | `CheckoutModal.integration.spec.tsx` | PASS |
+| 6 | Double-click → one purchase | `CheckoutModal.integration.spec.tsx` | PASS |
+| 11 | Provider unavailable / timeout (token + key kept) | `payment-provider.spec.ts`, `checkout.thunks.spec.ts`, `CheckoutModal.integration.spec.tsx` | PASS |
+| 12 | Pending forever / 2 s poll / 40 s ceiling | `usePaymentPolling.spec.tsx`, `CheckoutModal.integration.spec.tsx` | PASS |
 | 14 | Persistence v1 discarded, v2 restored | `persistence.spec.ts` | PASS |
-| 15 | Dialog focus/labels + 375 px bounds | component specs | PASS |
 | 16 | Delivery validation (phone-pattern parity) | `delivery.validation.spec.ts` | PASS |
-| 18 | Price-change warning + server total | `CheckoutModal.integration.spec.tsx` | PASS |
+| 17 | No card data or token stored (SC-005) | `CheckoutModal.integration.spec.tsx` | PASS |
+
+### Verified by hand in a browser
+
+| Quickstart # | Scenario | Result |
+|--------------|----------|--------|
+| 1 | Happy path end-to-end (visual flow, summary amounts, final status) | PASS |
+| 7 | Refresh mid-payment and on the summary | PASS |
+| 15 | Accessibility & 375×667 layout (no horizontal overflow) | PASS |
 
 ### Gates and committed-secret check
 
 - `front-end`: lint clean, build clean, `test:cov` green (39 suites / 464 tests; 97.92 / 95.69 / 96.18 / 98.37).
 - `back-end`: lint clean, build clean, `test:cov` green (54 suites / 501 tests; 96.39 / 90.73 / 100 / 96.21).
 - `git grep` over tracked files: **no provider company name**; the only secret-shaped strings are fake
-  `sk_live_123` fixtures in back-end tests that assert the exception filter does **not** leak them. No secret
-  is committed (real values live only in the untracked `.env`).
+  `fake-secret-for-test` fixtures in back-end tests that assert the exception filter does **not** leak them. No
+  secret is committed (real values live only in the untracked `.env`).
 
-**All 18 scenarios pass** (live sandbox where the provider is involved, Jest elsewhere).
+Scenarios 1 and 7 appear in both the live and the browser groups: each was exercised through the API and also
+confirmed by hand in the browser. Scenario 15 (accessibility and the 375×667 layout) can only be checked in a
+browser, and scenario 18's "price change" half is asserted by `CheckoutModal.integration.spec.tsx`. Together
+these groups cover all 18 scenarios — 9 exercised live via the API (plus the tokenization seam, 10 checks in
+total), 8 covered only by automated tests and 3 verified by hand in a browser — with no scenario claimed as
+passing without at least one of these verifications.
