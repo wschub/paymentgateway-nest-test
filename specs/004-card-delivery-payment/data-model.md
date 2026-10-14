@@ -25,26 +25,51 @@ Reused as-is (`GET /products`, `GET /products/:id`). The payment flow reads `id`
 
 No secret is present. A failure to read it (503) maps to `providerUnavailable`.
 
-## API entity: TransactionView (`POST /transactions`, `POST /transactions/:id/payment`, `GET /transactions/:id`)
+## API entity: TransactionView — per endpoint
+
+The back-end answers with **two different shapes** (contract:
+[`specs/002-transacciones-pagos/contracts/rest-api.md`](../002-transacciones-pagos/contracts/rest-api.md)).
+The front-end types them separately: `TransactionCreated` and `TransactionView`.
+
+### `TransactionCreated` — `POST /transactions` (201 Created / 200 replay)
+
+Only the creation fields; **never** `card`, `product`, `delivery` or `failureReason` — those only come from
+the pay/read endpoints. TypeScript: `TransactionCreated = Omit<TransactionView, 'card' | 'product' | 'delivery' | 'failureReason'>`.
 
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | purchase id; persisted as `transactionId` |
 | `reference` | string | unique reference; shown to the shopper |
-| `status` | `PENDING \| APPROVED \| DECLINED \| VOIDED \| ERROR` | drives the `finalStatus` step |
+| `status` | `PENDING \| APPROVED \| DECLINED \| VOIDED \| ERROR` | `PENDING` on creation |
 | `quantity` | integer | 1–10 |
 | `amounts.productAmountInCents` | integer | `unitPrice × quantity`, server-computed |
 | `amounts.baseFeeInCents` | integer | server config |
 | `amounts.deliveryFeeInCents` | integer | server config |
 | `amounts.totalInCents` | integer | sum, server-computed |
+
+### `TransactionView` — `POST /transactions/:id/payment` (202 / 200) and `GET /transactions/:id` (200)
+
+The five creation fields plus the enrichment. Pay answers **202 while the payment is in progress** and
+**200 only when the provider already gave a final status** at creation. The read endpoint always answers 200
+with this shape while the purchase exists.
+
+| Field | Type | Rules |
+|-------|------|-------|
+| *(the creation fields above)* | | same as `TransactionCreated` |
 | `card.brand` | string \| null | display only |
 | `card.lastFour` | string \| null | last four digits only |
 | `card.installments` | integer \| null | chosen installments |
-| `product.id` / `product.name` / `product.quantity` | — | summary for the UI |
-| `delivery.status/address/city/region` | — | `ASSIGNED` only when approved |
+| `product.id` / `product.name` / `product.quantity` | — \| null | summary for the UI |
+| `delivery.status` | `PENDING \| ASSIGNED` | `ASSIGNED` only when approved |
+| `delivery.address/city/region` | string | from the purchase form |
 | `failureReason` | string \| null | safe reason (e.g. `RESERVATION_EXPIRED`) |
 
-The view never contains a card number, CVC, token or secret.
+TypeScript marks `card`, `product`, `delivery` and `failureReason` **optional** on `TransactionView`, so no
+nested field is read without a guard. Because the creation body has none of them, the summary and status
+screens take the product name from the **selected product** and the delivery from the **form state** as a
+fallback (`DeliveryLocation = Pick<TransactionDeliveryView, 'address' | 'city' | 'region'>`).
+
+Neither shape ever contains a card number, CVC, token or secret.
 
 ## State entity: CheckoutState (`features/checkout`) — extended
 
