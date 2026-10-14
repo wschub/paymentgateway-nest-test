@@ -24,6 +24,35 @@ function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '')
+}
+
+function twoDigits(value: string): string {
+  return digitsOnly(value).slice(-2).padStart(2, '0')
+}
+
+/**
+ * The form keeps whatever formatting the buyer typed (spaces, dashes). The
+ * provider, however, validates the raw digits, so the payload is normalized
+ * here, at the request seam, right before it leaves the browser.
+ */
+function normalizeCard(card: TokenizeCardInput['card']): {
+  number: string
+  cvc: string
+  exp_month: string
+  exp_year: string
+  card_holder: string
+} {
+  return {
+    number: digitsOnly(card.number),
+    cvc: digitsOnly(card.cvc),
+    exp_month: twoDigits(card.expMonth),
+    exp_year: twoDigits(card.expYear),
+    card_holder: card.cardholder.trim(),
+  }
+}
+
 function readToken(
   parsed: unknown,
 ): TokenizedCard | null {
@@ -59,13 +88,7 @@ export async function tokenizeCard(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${input.publicKey}`,
       },
-      body: JSON.stringify({
-        number: input.card.number,
-        cvc: input.card.cvc,
-        exp_month: input.card.expMonth,
-        exp_year: input.card.expYear,
-        card_holder: input.card.cardholder,
-      }),
+      body: JSON.stringify(normalizeCard(input.card)),
     })
 
     if (!response.ok) {
