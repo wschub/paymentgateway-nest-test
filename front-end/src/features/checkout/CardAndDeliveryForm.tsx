@@ -12,7 +12,7 @@ import { validateDelivery } from '@/features/checkout/delivery.validation'
 import { parseExpiry, validateCard } from '@/features/checkout/card.validation'
 import type {
   CheckoutConfig,
-  TransactionView,
+  TransactionCreated,
 } from '@/features/checkout/checkout.types'
 import { describePaymentError } from '@/features/checkout/payment-errors'
 import { tokenizeCard } from '@/shared/api/payment-provider'
@@ -21,7 +21,7 @@ import { createApiError, type ApiError } from '@/shared/api/api.errors'
 import { LiveRegion } from '@/shared/ui/LiveRegion'
 
 export interface CardAndDeliveryFormResult {
-  transaction: TransactionView
+  transaction: TransactionCreated
   cardToken: string
   brand: string
   lastFour: string

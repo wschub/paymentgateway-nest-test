@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { CardAndDeliveryForm, type CardAndDeliveryFormResult } from '@/features/checkout/CardAndDeliveryForm'
-import type { CheckoutConfig, TransactionView } from '@/features/checkout/checkout.types'
+import type { CheckoutConfig, TransactionCreated } from '@/features/checkout/checkout.types'
 import { makeStore, type AppStore } from '@/app/store'
 import { tokenizeCard } from '@/shared/api/payment-provider'
 import { httpRequest } from '@/shared/api/http'
@@ -35,7 +35,9 @@ const CONFIG: CheckoutConfig = {
   installments: { default: 1, max: 12 },
 }
 
-const TRANSACTION: TransactionView = {
+// Literal `POST /transactions` 201 body: no card, product, delivery or
+// failureReason — those only come from the read/pay endpoints.
+const TRANSACTION: TransactionCreated = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   reference: 'REF-0001',
   status: 'PENDING',
@@ -46,10 +48,6 @@ const TRANSACTION: TransactionView = {
     deliveryFeeInCents: 10000,
     totalInCents: 3515000,
   },
-  card: null,
-  product: { id: 'p1', name: 'Mouse', quantity: 2 },
-  delivery: { status: 'created', address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' },
-  failureReason: null,
 }
 
 const IDEMPOTENCY_KEY = 'key-123'

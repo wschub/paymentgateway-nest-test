@@ -29,6 +29,20 @@ function buildTransaction(
   }
 }
 
+/** Defensive literal body: an approved view with no enrichment keys. */
+const APPROVED_WITHOUT_ENRICHMENT: TransactionView = {
+  id: 'tx-1',
+  reference: 'REF-0001',
+  status: 'APPROVED',
+  quantity: 2,
+  amounts: {
+    productAmountInCents: 7000000,
+    baseFeeInCents: 500000,
+    deliveryFeeInCents: 1200000,
+    totalInCents: 8700000,
+  },
+}
+
 const renderStatus = (
   props: Partial<React.ComponentProps<typeof PaymentStatus>> = {},
 ) => {
@@ -79,6 +93,22 @@ describe('PaymentStatus', () => {
     expect(screen.getByRole('heading', { name: '¡Pago aprobado!' })).toBeInTheDocument()
     expect(screen.getByText(/87\.000/)).toBeInTheDocument()
     expect(screen.getByText(/Calle 10 #23/)).toBeInTheDocument()
+  })
+
+  it('uses the form delivery when the view has none, and never crashes on the literal body', () => {
+    renderStatus({
+      transaction: APPROVED_WITHOUT_ENRICHMENT,
+      delivery: {
+        address: 'Calle 10 #23',
+        city: 'Bogotá',
+        region: 'Cundinamarca',
+      },
+      status: 'approved',
+    })
+
+    expect(screen.getByRole('heading', { name: '¡Pago aprobado!' })).toBeInTheDocument()
+    expect(screen.getByText(/Calle 10 #23/)).toBeInTheDocument()
+    expect(screen.getByText(/87\.000/)).toBeInTheDocument()
   })
 
   it('renders the declined result and lets the shopper retry', async () => {

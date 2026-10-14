@@ -15,6 +15,7 @@ import {
 import checkoutConfigReducer from '@/features/checkout/checkout-config.slice'
 import type {
   CheckoutConfig,
+  TransactionCreated,
   TransactionView,
 } from '@/features/checkout/checkout.types'
 import {
@@ -268,6 +269,26 @@ const buildTransaction = (
   ...overrides,
 })
 
+/**
+ * Literal `POST /transactions` response: only `id`, `reference`, `status`,
+ * `quantity` and `amounts` — the enrichment comes from the read/pay endpoints.
+ */
+const buildCreated = (
+  overrides: Partial<TransactionCreated> = {},
+): TransactionCreated => ({
+  id: 'tx-1',
+  reference: 'REF-1',
+  status: 'PENDING',
+  quantity: 2,
+  amounts: {
+    productAmountInCents: 7000000,
+    baseFeeInCents: 500000,
+    deliveryFeeInCents: 1200000,
+    totalInCents: 8700000,
+  },
+  ...overrides,
+})
+
 const DELIVERY = {
   fullName: 'Test Buyer',
   email: 'buyer@example.com',
@@ -323,12 +344,12 @@ describe('createTransaction thunk', () => {
   }
 
   it('POSTs the purchase without any amount field and returns the view', async () => {
-    mockedHttpRequest.mockResolvedValue(buildTransaction())
+    mockedHttpRequest.mockResolvedValue(buildCreated())
     const store = makeConfigStore()
 
-    const view = await store.dispatch(createTransaction(args)).unwrap()
+    const created = await store.dispatch(createTransaction(args)).unwrap()
 
-    expect(view.id).toBe('tx-1')
+    expect(created.id).toBe('tx-1')
     expect(mockedHttpRequest).toHaveBeenCalledWith('/transactions', {
       method: 'POST',
       headers: { 'Idempotency-Key': args.idempotencyKey },
@@ -354,7 +375,7 @@ describe('createTransaction thunk', () => {
   })
 
   it('treats a 200 idempotent replay like a 201 creation', async () => {
-    mockedHttpRequest.mockResolvedValue(buildTransaction({ status: 'PENDING' }))
+    mockedHttpRequest.mockResolvedValue(buildCreated({ status: 'PENDING' }))
     const store = makeConfigStore()
 
     await expect(store.dispatch(createTransaction(args)).unwrap()).resolves.toMatchObject({

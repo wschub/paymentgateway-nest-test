@@ -21,6 +21,7 @@ jest.mock('@/shared/api/http', () => ({
 
 const mockFormProps = jest.fn()
 const mockSummaryProps = jest.fn()
+let mockSummaryShouldThrow = false
 
 jest.mock('@/features/checkout/CardAndDeliveryForm', () => {
   return {
@@ -33,6 +34,8 @@ jest.mock('@/features/checkout/CardAndDeliveryForm', () => {
             type="button"
             onClick={() =>
               props.onCreated({
+                // Literal `POST /transactions` 201 body: no product, card,
+                // delivery or failureReason.
                 transaction: {
                   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
                   reference: 'REF-0001',
@@ -44,15 +47,6 @@ jest.mock('@/features/checkout/CardAndDeliveryForm', () => {
                     deliveryFeeInCents: 10000,
                     totalInCents: 3515000,
                   },
-                  card: null,
-                  product: { id: 'p1', name: 'Mouse', quantity: 2 },
-                  delivery: {
-                    status: 'created',
-                    address: 'Calle 10 #23',
-                    city: 'Bogotá',
-                    region: 'Cundinamarca',
-                  },
-                  failureReason: null,
                 },
                 cardToken: 'tok_1',
                 brand: 'VISA',
@@ -73,10 +67,17 @@ jest.mock('@/features/checkout/OrderSummary', () => {
   return {
     OrderSummary: (props: OrderSummaryProps) => {
       mockSummaryProps(props)
+      if (mockSummaryShouldThrow) {
+        throw new Error('boom')
+      }
       return (
         <div>
           {props.error ? <p role="alert">{props.error.message}</p> : null}
-          <p>Resumen de {props.transaction.product.name}</p>
+          <p>
+            Resumen de{' '}
+            {props.transaction.product?.name ?? props.productName ?? ''}
+          </p>
+          <p>Entrega en {props.delivery?.address ?? ''}</p>
           <button type="button" onClick={props.onPay} disabled={props.paying}>
             {props.paying ? 'Procesando (simulado)' : 'Pagar (simulado)'}
           </button>
@@ -102,6 +103,22 @@ const CONFIG: CheckoutConfig = {
 const TRANSACTION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const PRODUCT_ID = 'p1'
 
+const preloadedProduct: RootState['product'] = {
+  product: {
+    id: PRODUCT_ID,
+    name: 'Mouse',
+    description: 'Un mouse',
+    priceInCents: 3500000,
+    stock: 10,
+    imageUrl: '',
+  },
+  status: 'success',
+  error: null,
+  quantity: 2,
+  requestId: null,
+  lastReadAt: null,
+}
+
 const preloadedCheckout: CheckoutState = {
   currentStep: 'cardAndDelivery',
   selectedProductId: PRODUCT_ID,
@@ -124,6 +141,7 @@ function renderModal(
   const store = makeStore({
     checkout: { ...preloadedCheckout, ...checkoutOverrides },
     checkoutConfig: { config: null, status: 'idle', error: null },
+    product: preloadedProduct,
   } as Partial<RootState>)
   const element = (open: boolean): ReactElement => (
     <Provider store={store}>
@@ -155,7 +173,7 @@ const paidTransaction = {
   },
   card: { brand: 'VISA', lastFour: '2222', installments: 2 },
   product: { id: PRODUCT_ID, name: 'Mouse', quantity: 2 },
-  delivery: { status: 'created', address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' },
+  delivery: { status: 'ASSIGNED', address: 'Calle 10 #23', city: 'Bogotá', region: 'Cundinamarca' },
   failureReason: null,
 }
 
@@ -170,6 +188,7 @@ describe('CheckoutModal', () => {
     mockedHttpRequest.mockReset()
     mockFormProps.mockClear()
     mockSummaryProps.mockClear()
+    mockSummaryShouldThrow = false
   })
 
   it('loads the checkout config when it opens and renders the card form', async () => {
@@ -232,6 +251,32 @@ describe('CheckoutModal', () => {
         transaction: expect.objectContaining({ id: TRANSACTION_ID }),
       }),
     )
+  })
+
+  it('shows the friendly boundary instead of a blank page when a step throws', async () => {
+    const user = userEvent.setup()
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    successRoutes(paidTransaction)
+    const { onClose } = renderModal()
+
+    mockSummaryShouldThrow = true
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    await user.click(screen.getByRole('button', { name: 'Continuar (simulado)' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /algo salió mal/i,
+    )
+    // The dialog is never blank: the heading and the recovery action remain.
+    expect(
+      screen.getByRole('heading', { name: 'Resumen de la compra' }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Volver al producto' }),
+    )
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    errorSpy.mockRestore()
   })
 
   it('pays the created transaction and moves to the final status step', async () => {
@@ -397,6 +442,48 @@ describe('CheckoutModal', () => {
         String(path).endsWith('/payment'),
       ),
     ).toHaveLength(1)
+  })
+
+  it('shows the checkout fallback instead of a blank page when a step render throws', async () => {
+    const user = userEvent.setup()
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
+    successRoutes(paidTransaction)
+    const { onClose, rerenderOpen } = renderModal()
+
+    // The summary step throws when it renders after Continuar.
+    mockSummaryShouldThrow = true
+    await screen.findByRole('button', { name: 'Continuar (simulado)' })
+    await user.click(screen.getByRole('button', { name: 'Continuar (simulado)' }))
+
+    // The modal never blanks: the friendly fallback replaces the failed step.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/algo salió mal/i)
+    expect(screen.getByText(/vuelve al producto/i)).toBeInTheDocument()
+    expect(document.querySelector('dialog')).not.toBeNull()
+    expect(
+      screen.getByRole('heading', { name: 'Resumen de la compra' }),
+    ).toBeInTheDocument()
+
+    // Nothing sensitive is logged: the card token the modal holds never leaks.
+    const logged = consoleError.mock.calls.flat().join(' ')
+    expect(logged).not.toContain('tok_1')
+    expect(consoleError).toHaveBeenCalledWith(
+      'No se pudo mostrar el paso del pago.',
+    )
+
+    // The recovery action gives control back through close.
+    await user.click(screen.getByRole('button', { name: 'Volver al producto' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    // Reopening resets the boundary; without the token the flow goes back to
+    // the card entry step with the same purchase pending, as the spec says.
+    mockSummaryShouldThrow = false
+    rerenderOpen(false)
+    rerenderOpen(true)
+    expect(
+      await screen.findByRole('button', { name: 'Continuar (simulado)' }),
+    ).toBeInTheDocument()
+
+    consoleError.mockRestore()
   })
 
   it('closes the modal and hides the dialog', async () => {

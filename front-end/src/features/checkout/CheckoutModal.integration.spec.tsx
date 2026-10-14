@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { useState } from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { CheckoutModal } from '@/features/checkout/CheckoutModal'
 import { createAppStore, type AppStore } from '@/app/store'
@@ -42,6 +42,11 @@ const CONFIG: CheckoutConfig = {
   installments: { default: 1, max: 12 },
 }
 
+/**
+ * Literal transaction view (contract): the body of `POST /transactions/:id/payment`
+ * (202 while pending, 200 when final) and `GET /transactions/:id` (200) — all the
+ * enrichment keys are present. Delivery is `ASSIGNED` only when approved.
+ */
 function view(
   status: TransactionStatus = 'PENDING',
   overrides: Partial<TransactionView> = {},
@@ -60,7 +65,7 @@ function view(
     card: null,
     product: { id: PRODUCT_ID, name: 'Mouse', quantity: 2 },
     delivery: {
-      status: 'created',
+      status: status === 'APPROVED' ? 'ASSIGNED' : 'PENDING',
       address: 'Calle 10 #23',
       city: 'Bogotá',
       region: 'Cundinamarca',
@@ -126,14 +131,21 @@ const fetchMock = jest.fn(
     }
     if (path === '/transactions') {
       createdSeq += 1
+      // Literal `POST /transactions` 201 body (contract): no product, card,
+      // delivery or failureReason — those only come from `GET /transactions/:id`.
       return Promise.resolve(
-        jsonResponse(
-          201,
-          view('PENDING', {
-            id: `tx-${createdSeq}`,
-            reference: `REF-${createdSeq}`,
-          }),
-        ),
+        jsonResponse(201, {
+          id: `tx-${createdSeq}`,
+          reference: `REF-${createdSeq}`,
+          status: 'PENDING',
+          quantity: 2,
+          amounts: {
+            productAmountInCents: 7000000,
+            baseFeeInCents: 500000,
+            deliveryFeeInCents: 1200000,
+            totalInCents: 8700000,
+          },
+        }),
       )
     }
     if (/^\/transactions\/[^/]+$/.test(path)) {
@@ -188,6 +200,21 @@ function renderModal(
         ...overrides,
       },
       checkoutConfig: { config: null, status: 'idle', error: null },
+      product: {
+        product: {
+          id: PRODUCT_ID,
+          name: 'Mouse',
+          description: 'Un mouse',
+          priceInCents: 3500000,
+          stock: 10,
+          imageUrl: '',
+        },
+        status: 'success',
+        error: null,
+        quantity: 2,
+        requestId: null,
+        lastReadAt: null,
+      },
     },
   })
   const element: ReactElement = (
@@ -301,6 +328,23 @@ afterEach(() => {
 })
 
 describe('CheckoutModal US3 edge cases (end to end)', () => {
+  it('renders the summary from the POST /transactions body plus the form state', async () => {
+    renderModal()
+    await reachSummaryWithCard()
+
+    // Product name comes from the selected product (the creation body has none).
+    expect(screen.getByText('Mouse')).toBeInTheDocument()
+    expect(screen.getByText(/Cantidad:\s*2/)).toBeInTheDocument()
+    // Delivery comes from the form state (the creation body has none).
+    expect(screen.getByText(/Calle 10 #23/)).toBeInTheDocument()
+    // The three amounts plus the total, straight from the creation body.
+    expect(screen.getByText(/70\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/5\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/12\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/87\.000/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
+  })
+
   it('tokenizes and creates the purchase only once when Continuar is double-clicked', async () => {
     renderModal()
     await screen.findByRole('button', { name: 'Continuar' })
@@ -357,6 +401,31 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     expect(store.getState().checkout.idempotencyKey).toBe(key)
   })
 
+  it('enters pending from the literal POST payment 202 body and re-reads via GET /transactions/:id', async () => {
+    // POST /transactions/:id/payment → 202 with the current view (contract).
+    paymentQueue = [{ status: 202, body: view('PENDING') }]
+    // GET /transactions/:id → 200 with the current view (contract).
+    readBody = view('PENDING')
+    const { store } = renderModal()
+    await reachSummaryWithCard()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Estamos confirmando tu pago' }),
+    ).toBeInTheDocument()
+    const [payment] = paymentPosts()
+    expect(payment).toBeDefined()
+    expect(store.getState().checkout.paymentStatus).toBe('pending')
+
+    // The manual re-check is the polling path: it hits GET /transactions/:id.
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a verificar' }))
+    await waitFor(() => expect(statusReads().length).toBeGreaterThan(0))
+    expect(statusReads().some((call) => ourApiPath(call) === '/transactions/tx-1')).toBe(
+      true,
+    )
+  })
+
   it('keeps the same transaction and key and gives the card back on an invalid token', async () => {
     paymentQueue = [{ status: 422, body: { code: 'INVALID_PAYMENT_TOKEN' } }]
     const { store } = renderModal()
@@ -381,7 +450,7 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     async (status) => {
       paymentQueue = [
         {
-          status: 201,
+          status: 200,
           body: view(status, {
             failureReason:
               status === 'VOIDED' ? 'RESERVATION_EXPIRED' : null,
@@ -494,7 +563,7 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
   it('warns and shows the server total when the charged amount changed', async () => {
     paymentQueue = [
       {
-        status: 201,
+        status: 200,
         body: view('APPROVED', {
           amounts: {
             productAmountInCents: 7000000,
@@ -516,7 +585,7 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
   })
 
   it('never leaks the card number or the CVC into state, storage or our API (SC-005)', async () => {
-    paymentQueue = [{ status: 201, body: view('APPROVED') }]
+    paymentQueue = [{ status: 200, body: view('APPROVED') }]
     const { store, storage } = renderModal()
 
     await reachSummaryWithCard(SPACED_CARD_NUMBER)
