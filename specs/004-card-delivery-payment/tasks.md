@@ -152,10 +152,10 @@ that client-supplied amounts never change what is charged.
 
 **Purpose**: Documentation, verification and final quality gates.
 
-- [ ] T037 [P] Correct `front-end/README.md`: replace "lives only in the payment provider's hosted flow" with "tokenized in the browser with the public key, never stored" (hosted widget is not used, D5); fix the lint note to say **both** `src/shared/api/http.ts` **and** `src/shared/api/payment-provider.ts` may call `fetch`; correct the "read-only product API" description so it also covers the checkout-config, transaction-create, payment and status endpoints; and reference the version-2 persistence contract and the idempotency key.
-- [ ] T039 Run `front-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % and fix gaps.
-- [ ] T040 Run `back-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % for touched code.
-- [ ] T041 Validate `quickstart.md` scenarios 1–18 (sandbox manual runs for the happy path and declined/error cards only); confirm no provider company name and no secret was committed.
+- [X] T037 [P] Correct `front-end/README.md`: replace "lives only in the payment provider's hosted flow" with "tokenized in the browser with the public key, never stored" (hosted widget is not used, D5); fix the lint note to say **both** `src/shared/api/http.ts` **and** `src/shared/api/payment-provider.ts` may call `fetch`; correct the "read-only product API" description so it also covers the checkout-config, transaction-create, payment and status endpoints; and reference the version-2 persistence contract and the idempotency key. *(Completed via T048.)*
+- [X] T039 Run `front-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % and fix gaps. *(Verified: lint + build clean; 39 suites / 464 tests; 97.92 / 95.69 / 96.18 / 98.37.)*
+- [X] T040 Run `back-end` gates: `npm run lint && npm run build && npm run test:cov`; ensure coverage ≥ 80 % for touched code. *(Verified: lint + build clean; 54 suites / 501 tests; 96.39 / 90.73 / 100 / 96.21.)*
+- [X] T041 Validate `quickstart.md` scenarios 1–18 (sandbox manual runs for the happy path and declined/error cards only); confirm no provider company name and no secret was committed. *(Completed via T049; results recorded in `quickstart.md` → "Validation results".)*
 
 ---
 
@@ -237,3 +237,14 @@ Task: "Implement front-end/src/features/checkout/OrderSummary.tsx"
   edge cases.
 - Commit after each task or logical group using Conventional Commits.
 - Stop at any checkpoint to validate the story independently.
+
+---
+
+## Phase 7: Convergence
+
+**Purpose**: Close remaining gaps found after the US3 implementation pass, assessed against `spec.md`,
+`plan.md` and `.specify/memory/constitution.md`. Appended by `/speckit.converge`; no existing task was
+modified, renumbered or deleted.
+
+- [X] T048 Correct `front-end/README.md` so the payment description matches FR-023: state that the card is tokenized in the browser with the provider public key and never stored, and remove the "payment provider's hosted flow" claim (hosted widget is not used, D5); describe the app's API as the catalog **plus** the checkout-config, transaction-create, payment and status endpoints (no longer "read-only"); fix the ESLint note to say **both** `src/shared/api/http.ts` and `src/shared/api/payment-provider.ts` may call `fetch`; document the version-2 `checkout-progress` document and its `idempotencyKey`; and refresh the stale coverage table per FR-023 / plan: README touch-point / T037 (contradicts)
+- [X] T049 Execute and record the `quickstart.md` manual validation of scenarios 1–18 against the provider sandbox (happy path plus declined/error cards) and confirm the Definition of Done, including that no provider company name and no secret is committed per T041 (partial)
