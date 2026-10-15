@@ -150,11 +150,11 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 **Purpose**: Feature-wide verification and definition-of-done checks
 
-- [ ] T035 [P] Run the ESLint restriction test (`front-end/src/__tests__/eslint-restrictions.spec.ts`) and `npm run lint` — `fetch` remains boxed in `front-end/src/shared/api/` only
-- [ ] T036 [P] Run `cd back-end && npm run lint && npm run build && npm run test:cov` as regression evidence (back-end untouched)
-- [ ] T037 Run the full front-end gate: `cd front-end && npm run lint && npm run build && npm test && npm run test:cov` — green with ≥ 80 % on lines/branches/functions/statements
-- [ ] T038 Verify the privacy/language invariants: no card number/CVC field or card token in Redux state (dedicated tests: CARD_LIKE regex in `front-end/src/features/checkout/checkout.slice.spec.ts`, no-leak test in `front-end/src/features/checkout/CheckoutModal.integration.spec.tsx`), persistence or requests; Spanish UI copy throughout; backdrop matches the 004 `<dialog>` pattern; no horizontal overflow at 375×667 (FR-017, quickstart scenario 11)
-- [ ] T039 Run the quickstart.md manual validation scenarios 1–11 against a local back-end and fill in the "Validation results" section of `specs/005-finalize-checkout/quickstart.md`
+- [X] T035 [P] Run the ESLint restriction test (`front-end/src/__tests__/eslint-restrictions.spec.ts`) and `npm run lint` — `fetch` remains boxed in `front-end/src/shared/api/` only
+- [X] T036 [P] Run `cd back-end && npm run lint && npm run build && npm run test:cov` as regression evidence (back-end untouched)
+- [X] T037 Run the full front-end gate: `cd front-end && npm run lint && npm run build && npm test && npm run test:cov` — green with ≥ 80 % on lines/branches/functions/statements
+- [X] T038 Verify the privacy/language invariants: no card number/CVC field or card token in Redux state (dedicated tests: CARD_LIKE regex in `front-end/src/features/checkout/checkout.slice.spec.ts`, no-leak test in `front-end/src/features/checkout/CheckoutModal.integration.spec.tsx`), persistence or requests; Spanish UI copy throughout; backdrop matches the 004 `<dialog>` pattern; no horizontal overflow at 375×667 (FR-017, quickstart scenario 11)
+- [X] T039 Run the quickstart.md manual validation scenarios 1–11 against a local back-end and fill in the "Validation results" section of `specs/005-finalize-checkout/quickstart.md`
 
 ---
 

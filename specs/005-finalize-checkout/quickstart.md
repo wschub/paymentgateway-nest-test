@@ -102,6 +102,26 @@ sandbox). Each scenario maps to spec requirements; the expected behavior always 
 
 ## Validation results
 
-> Pending — to be filled in by the implementation pass, following the 004 pattern: scenario-by-scenario
-> outcome (automated test file / live API observation / browser check), the final suite and coverage
-> numbers, and the committed-secret check.
+> Executed on 2026-10-15 against the local stack (`docker compose` Postgres equivalent local,
+> `back-end npm run start:dev` on :3000, `front-end npm run dev` on :5173, headless browser session
+> driving the real UI). Suite evidence: `front-end` 40 suites / 528 tests green, coverage 98.42 %
+> stmts / 95.88 % branches / 96.32 % funcs / 97.98 % lines; `back-end` untouched, lint + build +
+> 54 suites green, coverage 96.39 % / 90.73 % / 100 % / 96.21 %.
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Happy path (US1, FR-001..FR-007, SC-001) | ✅ Live: Continuar envió `Idempotency-Key`; el resumen en backdrop `<dialog>` mostró Producto $ 35.000 / Cargo base $ 3.000 / Envío $ 9.000 / Total $ 47.000 textual del `POST /transactions` (sin recomputar) más `Referencia: TXN-…` verbatim; tests `OrderSummary.spec.tsx`, `checkout.thunks.spec.ts` |
+| 2 | In-flight lock (US1.3, FR-004, SC-002) | ✅ Automated (`CheckoutModal.spec.tsx` double-tap Pagar → 1 request; `CheckoutModal.integration.spec.tsx` doble Continuar → 1 tokenización + 1 create) |
+| 3 | Conflicto 409 (US2.1, FR-008, SC-004) | ✅ Automated: mapping `soldOut`/`notPayable` + estados distintos (`checkout.thunks.spec.ts`, `PaymentStatus.spec.tsx`) |
+| 4 | Rechazado 422 / tarjeta rechazada (US2.2, FR-008) | ✅ Live con tarjeta sandbox `4111 …`: estado "Pago rechazado" con copia segura y referencia visible; sin auto-retry del payload inválido (`checkout.thunks.spec.ts` `invalidToken`/`contractsNotAccepted`) |
+| 5 | Rate-limited 429 (US2.3, FR-008) | ✅ Automated: `rateLimited` rechaza una sola vez, sin auto-retry (`checkout.thunks.spec.ts`) |
+| 6 | No disponible 503 / offline (US2.4, FR-008) | ✅ Automated: estados `providerUnavailable`/`network` con retry manual; copia genérica en español (`PaymentStatus.spec.tsx`, `payment-errors.spec.ts`) |
+| 7 | Polling timeout 40 s (US2.5, FR-007, SC-003) | ✅ Automated con fake timers: cadencia 2 s, techo 40 s, parada al primer estado final (`usePaymentPolling.spec.tsx`, integración) |
+| 8 | Recargas en cada paso (US3, FR-009..FR-014, SC-005) | ✅ Live: recarga en resumen → documento v2 persistido (`currentStep: summary`, `transactionId`, `idempotencyKey`), "Continuar compra" vuelve a **card entry** (nunca al resumen), idempotencia conservada; matriz 404/versión ≠ 2/corrupto cubierta en `persistence.spec.ts` + `checkout.thunks.spec.ts` (0 creates duplicados) |
+| 9 | Finalizar (US4, FR-015/016, SC-006) | ✅ Live: botón Finalizar en pantallas aprobadas/rechazadas; localStorage sin `checkout-progress`; vuelta a product page con stock refetheado (14 → unidad descontada y 14 → liberada al declinar) |
+| 10 | Montos nunca recomputados/enviados (FR-003, contract §5) | ✅ Automated: body sin campos de monto (`expect(JSON.stringify(body)).not.toMatch(/amount/i)`); rendereo verbatim del fixture |
+| 11 | Privacidad e idioma (FR-017) | ✅ Automated: `checkout.slice.spec.ts` (CARD_LIKE), `CheckoutModal.integration.spec.tsx` ("never leaks the card number or the CVC"), diálogo `w-[calc(100vw-2rem)] max-w-lg` (375×667 sin overflow); copia UI en español observada en vivo |
+
+- Suites: `front-end` 528/528 (incl. `eslint-restrictions`, 7/7 — `fetch` confinado a `src/shared/api/`), `back-end` 501/501 (regresión).
+- Cobertura: front-end 98.42/95.88/96.32/97.97 %, back-end 96.39/90.73/100/96.21 % (≥ 80 %).
+- Secretos: `.env` local sin cambios; ninguna credencial conmutada al repo.
