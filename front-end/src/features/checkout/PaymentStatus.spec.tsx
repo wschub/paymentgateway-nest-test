@@ -48,6 +48,7 @@ const renderStatus = (
 ) => {
   const onRecheck = jest.fn()
   const onRetry = jest.fn()
+  const onFinalize = jest.fn()
   render(
     <PaymentStatus
       transaction={null}
@@ -55,10 +56,11 @@ const renderStatus = (
       error={null}
       onRecheck={onRecheck}
       onRetry={onRetry}
+      onFinalize={onFinalize}
       {...props}
     />,
   )
-  return { onRecheck, onRetry }
+  return { onRecheck, onRetry, onFinalize }
 }
 
 describe('PaymentStatus', () => {
@@ -71,6 +73,10 @@ describe('PaymentStatus', () => {
 
     await user.click(screen.getByRole('button', { name: 'Volver a verificar' }))
     expect(onRecheck).toHaveBeenCalledTimes(1)
+    // Finalizar only appears on terminal states, not while confirming.
+    expect(
+      screen.queryByRole('button', { name: 'Finalizar' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the pending confirmation with the reference once the view exists', () => {
@@ -193,6 +199,20 @@ describe('PaymentStatus', () => {
 
       await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
       expect(onRetry).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it.each(['approved', 'declined', 'voided', 'error'] as const)(
+    'offers the terminal Finalizar action on the %s screen',
+    async (status) => {
+      const user = userEvent.setup()
+      const { onFinalize } = renderStatus({
+        transaction: status === 'error' ? null : buildTransaction(),
+        status,
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Finalizar' }))
+      expect(onFinalize).toHaveBeenCalledTimes(1)
     },
   )
 

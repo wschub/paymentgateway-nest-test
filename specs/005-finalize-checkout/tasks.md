@@ -133,14 +133,14 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 - [X] T028 [P] [US4] Add Finalizar tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: `finalizeCheckout` removes the `checkout-progress` document, resets the slice (`step product`, `transactionId`/`idempotencyKey`/`delivery`/`transaction`/`paymentError` cleared, `paymentStatus idle`), navigates to the product page and issues a fresh product fetch (FR-015, FR-016, SC-006, US4.4)
 - [X] T029 [P] [US4] Add finalize-reducer tests in `front-end/src/features/checkout/checkout.slice.spec.ts` (clear-on-Finalizar wiring, `startOver` semantics, subscriber never rewrites a stale document after the clear — contract §6)
-- [ ] T030 [P] [US4] Extend `front-end/src/features/checkout/CheckoutModal.integration.spec.tsx`: press Finalizar on approved/declined/terminal-error screens → modal closes, shopper lands on the product page, stock refetched (no pre-purchase cached value)
+- [X] T030 [P] [US4] Extend `front-end/src/features/checkout/CheckoutModal.integration.spec.tsx`: press Finalizar on approved/declined/terminal-error screens → modal closes, shopper lands on the product page, stock refetched (no pre-purchase cached value)
 
 ### Implementation for User Story 4
 
 - [X] T031 [US4] Implement the finalize reducer (clear all checkout progress on Finalizar) in `front-end/src/features/checkout/checkout.slice.ts` (depends on T029)
 - [X] T032 [US4] Implement the `finalizeCheckout` thunk (remove document + reset + navigate + fresh product fetch) in `front-end/src/features/checkout/checkout.thunks.ts` (depends on T028, T031)
-- [ ] T033 [US4] Wire the Finalizar action on all terminal states in `front-end/src/features/checkout/PaymentStatus.tsx` and the Finalizar handler (close, finalize, return to product page) in `front-end/src/features/checkout/CheckoutModal.tsx` (depends on T032)
-- [ ] T034 [US4] Ensure `front-end/src/features/product/ProductPage.tsx` lands the shopper after Finalizar with stock refetched from the server (depends on T032)
+- [X] T033 [US4] Wire the Finalizar action on all terminal states in `front-end/src/features/checkout/PaymentStatus.tsx` and the Finalizar handler (close, finalize, return to product page) in `front-end/src/features/checkout/CheckoutModal.tsx` (depends on T032)
+- [X] T034 [US4] Ensure `front-end/src/features/product/ProductPage.tsx` lands the shopper after Finalizar with stock refetched from the server (depends on T032)
 
 **Checkpoint**: All user stories independently functional — the purchase loop closes cleanly with no residual state
 

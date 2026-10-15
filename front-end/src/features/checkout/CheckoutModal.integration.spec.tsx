@@ -584,6 +584,58 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     expect(screen.getByText(/90\.000/)).toBeInTheDocument()
   })
 
+  it('Finalizar on the approved screen clears every trace, closes the modal and refetches stock', async () => {
+    paymentQueue = [{ status: 200, body: view('APPROVED') }]
+    const { store, storage } = renderModal()
+    await reachSummaryWithCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar' }))
+    await screen.findByRole('heading', { name: '¡Pago aprobado!' })
+
+    const productReadsBefore = ourApiCalls().filter((call) =>
+      /^\/products\//.test(ourApiPath(call)),
+    ).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+
+    // All local checkout progress is gone (FR-015, US4.4).
+    const cleared = store.getState().checkout
+    expect(cleared.currentStep).toBe('product')
+    expect(cleared.transactionId).toBeNull()
+    expect(cleared.idempotencyKey).toBeNull()
+    expect(cleared.transaction).toBeNull()
+    expect(cleared.paymentError).toBeNull()
+    expect(cleared.paymentStatus).toBe('idle')
+    expect(storage.data[PERSISTENCE_STORAGE_KEY]).toBeUndefined()
+
+    // The product page re-reads its stock from the server (FR-016, SC-006).
+    const productReadsAfter = ourApiCalls().filter((call) =>
+      /^\/products\//.test(ourApiPath(call)),
+    )
+    expect(productReadsAfter.length).toBe(productReadsBefore + 1)
+  })
+
+  it('Finalizar on a declined screen clears the purchase while keeping the retried state clean', async () => {
+    paymentQueue = [{ status: 200, body: view('DECLINED') }]
+    const { store, storage } = renderModal()
+    await reachSummaryWithCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar' }))
+    await screen.findByRole('heading', { name: 'Pago rechazado' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    const cleared = store.getState().checkout
+    expect(cleared.currentStep).toBe('product')
+    expect(cleared.transactionId).toBeNull()
+    expect(cleared.idempotencyKey).toBeNull()
+    expect(cleared.paymentStatus).toBe('idle')
+    expect(storage.data[PERSISTENCE_STORAGE_KEY]).toBeUndefined()
+    // No new purchase was created behind the scenes.
+    expect(createPosts()).toHaveLength(1)
+  })
+
   it('never leaks the card number or the CVC into state, storage or our API (SC-005)', async () => {
     paymentQueue = [{ status: 200, body: view('APPROVED') }]
     const { store, storage } = renderModal()

@@ -17,6 +17,7 @@ export interface PaymentStatusProps {
   error: ApiError | null
   onRecheck: () => void
   onRetry: () => void
+  onFinalize: () => void
   priceChanged?: boolean
 }
 
@@ -27,6 +28,7 @@ export function PaymentStatus({
   error,
   onRecheck,
   onRetry,
+  onFinalize,
   priceChanged = false,
 }: PaymentStatusProps) {
   const guidance = describePaymentError(error)
@@ -59,6 +61,16 @@ export function PaymentStatus({
     </button>
   )
 
+  const finalizeButton = (
+    <button
+      type="button"
+      onClick={onFinalize}
+      className="w-fit rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+    >
+      Finalizar
+    </button>
+  )
+
   const shell = (children: ReactNode) => (
     <section aria-label="Estado del pago" className="flex flex-col gap-3">
       {children}
@@ -75,7 +87,10 @@ export function PaymentStatus({
           {guidance?.message ??
             'Ocurrió un error inesperado. Inténtalo de nuevo en unos momentos.'}
         </p>
-        {retryButton}
+        <div className="flex gap-3">
+          {finalizeButton}
+          {retryButton}
+        </div>
       </>,
     )
   }
@@ -101,6 +116,7 @@ export function PaymentStatus({
             ) : null}
           </>
         ) : null}
+        {finalizeButton}
       </>,
     )
   }
@@ -115,7 +131,10 @@ export function PaymentStatus({
         {transaction ? (
           <p className="text-sm text-gray-600">Referencia: {transaction.reference}</p>
         ) : null}
-        {retryButton}
+        <div className="flex gap-3">
+          {finalizeButton}
+          {retryButton}
+        </div>
       </>,
     )
   }
@@ -130,7 +149,10 @@ export function PaymentStatus({
             ? 'La reserva expiró antes de confirmar el pago. Inicia una compra nueva.'
             : 'Esta compra ya no puede completarse. Inicia una compra nueva.'}
         </p>
-        {retryButton}
+        <div className="flex gap-3">
+          {finalizeButton}
+          {retryButton}
+        </div>
       </>,
     )
   }
