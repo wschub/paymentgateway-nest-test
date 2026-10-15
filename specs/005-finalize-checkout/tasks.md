@@ -32,9 +32,9 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 **Purpose**: Baseline verification — confirm the 004 plumbing this feature builds on is present and green
 
-- [ ] T001 Confirm branch `005-finalize-checkout` checked out and install dependencies in `front-end/` (`npm install`)
-- [ ] T002 [P] Run the existing front-end gate (`cd front-end && npm run lint && npm run build && npm test`) to establish a green baseline before any change
-- [ ] T003 [P] Verify the merged `fix/summary-blank-screen` fix and guarded transaction enrichment are present in `front-end/src/features/checkout/OrderSummary.tsx` and `front-end/src/features/checkout/checkout.types.ts` (R10: `TransactionCreated` enrichment reads go through optional chaining with fallbacks)
+- [X] T001 Confirm branch `005-finalize-checkout` checked out and install dependencies in `front-end/` (`npm install`)
+- [X] T002 [P] Run the existing front-end gate (`cd front-end && npm run lint && npm run build && npm test`) to establish a green baseline before any change
+- [X] T003 [P] Verify the merged `fix/summary-blank-screen` fix and guarded transaction enrichment are present in `front-end/src/features/checkout/OrderSummary.tsx` and `front-end/src/features/checkout/checkout.types.ts` (R10: `TransactionCreated` enrichment reads go through optional chaining with fallbacks)
 
 ---
 
