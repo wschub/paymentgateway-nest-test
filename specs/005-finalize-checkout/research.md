@@ -157,7 +157,8 @@ Most plumbing already exists from feature 004; these decisions lock its behavior
 
 ## R8 — Finalizar: one terminal action that clears the document and all local progress
 
-- **Decision**: **Finalizar** (final status screen, approved/declined/terminal error) dispatches a
+- **Decision**: **Finalizar** (only on a final status the server returned: approved/declined/voided/error —
+  never on a client-side failure or the 40 s timeout) dispatches a
   `finalizeCheckout` thunk that: (1) removes the `checkout-progress` document, (2) resets the checkout slice
   (`startOver` semantics: step `product`, `transactionId`/`idempotencyKey`/`delivery` cleared, `paymentStatus`
   `idle`), (3) navigates to the product page, and (4) triggers a fresh product fetch from the server — never
@@ -172,8 +173,8 @@ Most plumbing already exists from feature 004; these decisions lock its behavior
   reset satisfies "no residual state"; (c) trust the product slice's cache — rejected: FR-016 demands a fresh
   fetch post-purchase.
 - **Consequence**: `checkout.slice.ts` reuses the existing terminal reducers (`startOver`/`purchaseCompleted`);
-  `finalizeCheckout` additionally dispatches the product refetch; `PaymentStatus` wires Finalizar on all
-  terminal states, `CheckoutModal` closes over it, and `ProductPage` is the landing target.
+  `finalizeCheckout` additionally dispatches the product refetch; `PaymentStatus` wires Finalizar only on
+  the server-returned final statuses, `CheckoutModal` closes over it, and `ProductPage` is the landing target.
 
 ## R9 — No new runtime dependency; every concern reuses an existing seam
 

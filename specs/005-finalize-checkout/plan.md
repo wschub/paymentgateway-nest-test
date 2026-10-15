@@ -156,7 +156,8 @@ front-end/
         │   ├── persistence.ts        # unchanged (v2 whitelist already matches recovery doc; clear on Finalizar)
         │   ├── CheckoutModal.tsx     # EDIT: Finalizar handler (close, finalize, return to product page);
         │   │                         #       keep the summary-never-restored guard
-        │   ├── PaymentStatus.tsx     # EDIT: add Finalizar action on approved/declined/terminal error states
+        │   ├── PaymentStatus.tsx     # EDIT: add Finalizar action only on server-returned final statuses
+        │   │                         #       (approved/declined/voided/error); never on client-side failures or the 40 s timeout
         │   ├── OrderSummary.tsx      # unchanged (renders server amounts verbatim; Pagar disabled in-flight)
         │   ├── usePaymentPolling.ts  # unchanged (2 s interval, 40 s ceiling, stops on final status)
         │   ├── payment-errors.ts     # EDIT (if needed): guidance copy for timeout/service-unavailable states
