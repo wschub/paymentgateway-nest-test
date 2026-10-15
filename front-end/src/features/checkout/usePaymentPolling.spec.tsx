@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { makeStore, type AppStore, type RootState } from '@/app/store'
 import { usePaymentPolling } from '@/features/checkout/usePaymentPolling'
+import { readTransactionStatus } from '@/features/checkout/checkout.thunks'
 import type {
   TransactionStatus,
   TransactionView,
@@ -137,7 +138,28 @@ describe('usePaymentPolling', () => {
     expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
   })
 
-  it('stops at the ceiling and leaves the pending state for a manual re-check', async () => {
+  it('stops polling immediately when the first read resolves DECLINED', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction('DECLINED'))
+    const { store } = renderPolling('pending')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS)
+    })
+    await flush()
+
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+    expect(store.getState().checkout.paymentStatus).toBe('declined')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS * 5)
+    })
+    await flush()
+
+    // A first-poll final status ends polling with no extra request (SC-003).
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches to the status-unavailable timeout state at the ceiling without a final status (US2.5)', async () => {
     mockedHttpRequest.mockResolvedValue(buildTransaction('PENDING'))
     const { store } = renderPolling('pending')
 
@@ -149,15 +171,49 @@ describe('usePaymentPolling', () => {
     const atCeiling = mockedHttpRequest.mock.calls.length
     expect(atCeiling).toBeGreaterThan(0)
     expect(atCeiling).toBeLessThanOrEqual(STATUS_POLL_CEILING_MS / STATUS_POLL_INTERVAL_MS)
-    expect(store.getState().checkout.paymentStatus).toBe('pending')
 
+    // Never a success, never an endless spinner: the ceiling renders the
+    // status-unavailable timeout state and releases the lock.
+    const checkout = store.getState().checkout
+    expect(checkout.paymentStatus).toBe('error')
+    expect(checkout.paymentStatus).not.toBe('approved')
+    expect(checkout.paymentError).toEqual(
+      expect.objectContaining({ kind: 'statusUnavailable' }),
+    )
+
+    // The window is over: no automatic poll may outlive the ceiling (SC-003).
     await act(async () => {
       jest.advanceTimersByTime(STATUS_POLL_CEILING_MS)
     })
     await flush()
 
     expect(mockedHttpRequest.mock.calls.length).toBe(atCeiling)
+  })
+
+  it('resumes polling under a fresh window after a manual re-check following the ceiling', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction('PENDING'))
+    const { store } = renderPolling('pending')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_CEILING_MS)
+    })
+    await flush()
+    expect(store.getState().checkout.paymentStatus).toBe('error')
+
+    // The shopper presses "Volver a verificar": one manual read of the real status.
+    await act(async () => {
+      await store.dispatch(readTransactionStatus(TRANSACTION_ID))
+    })
     expect(store.getState().checkout.paymentStatus).toBe('pending')
+
+    const beforeRestart = mockedHttpRequest.mock.calls.length
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS)
+    })
+    await flush()
+
+    // Still PENDING: a fresh window resumes polling from the manual re-check.
+    expect(mockedHttpRequest.mock.calls.length).toBe(beforeRestart + 1)
   })
 
   it('cancels the interval on unmount', async () => {

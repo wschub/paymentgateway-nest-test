@@ -337,6 +337,52 @@ describe('checkout slice', () => {
     expect(completed).toEqual(cleanState)
   })
 
+  it('remaps a restored summary step to card entry — the summary is never restored directly (FR-014)', () => {
+    const state = checkoutSlice.reducer(
+      undefined,
+      restored(validRestoredState),
+    )
+
+    expect(validRestoredState.currentStep).toBe('summary')
+    expect(state.currentStep).toBe('cardAndDelivery')
+    expect(state.transactionId).toBe(validRestoredState.transactionId)
+    expect(state.idempotencyKey).toBe(validRestoredState.idempotencyKey)
+  })
+
+  it('keeps a restored finalStatus step so the recovery lookup can resume polling', () => {
+    const state = checkoutSlice.reducer(
+      undefined,
+      restored({ ...validRestoredState, currentStep: 'finalStatus' }),
+    )
+
+    expect(state.currentStep).toBe('finalStatus')
+  })
+
+  it('keeps a restored card entry step as-is', () => {
+    const state = checkoutSlice.reducer(
+      undefined,
+      restored({ ...validRestoredState, currentStep: 'cardAndDelivery' }),
+    )
+
+    expect(state.currentStep).toBe('cardAndDelivery')
+  })
+
+  it('startOver (the finalize clear) drops an in-flight transaction and any error', () => {
+    let inFlight = checkoutSlice.reducer(
+      validRestoredState,
+      transactionReceived(buildTransactionView({ id: 'tx-9' })),
+    )
+    inFlight = checkoutSlice.reducer(
+      inFlight,
+      paymentFailed(createApiError('network')),
+    )
+    expect(inFlight.paymentStatus).toBe('error')
+
+    const cleared = checkoutSlice.reducer(inFlight, startOver())
+    expect(cleared).toEqual(cleanState)
+    expectNoCardLikeKeys(cleared)
+  })
+
   it('clears the final transaction but keeps the purchase on retryAfterFinal', () => {
     let state = checkoutSlice.reducer(
       undefined,
@@ -381,7 +427,9 @@ describe('checkout slice', () => {
       undefined,
       restored(validRestoredState),
     )
-    expect(state).toEqual(validRestoredState)
+    // validRestoredState holds `currentStep: 'summary'`; the summary can never
+    // be restored directly, so it lands on card entry instead (FR-014).
+    expect(state).toEqual({ ...validRestoredState, currentStep: 'cardAndDelivery' })
   })
 
   it('resets the in-memory and payment fields on restore', () => {

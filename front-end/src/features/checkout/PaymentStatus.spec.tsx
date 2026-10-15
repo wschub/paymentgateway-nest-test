@@ -5,7 +5,7 @@ import type {
   TransactionStatus,
   TransactionView,
 } from '@/features/checkout/checkout.types'
-import { createApiError } from '@/shared/api/api.errors'
+import { createApiError, type ApiErrorKind } from '@/shared/api/api.errors'
 
 function buildTransaction(
   overrides: Partial<TransactionView> = {},
@@ -48,6 +48,7 @@ const renderStatus = (
 ) => {
   const onRecheck = jest.fn()
   const onRetry = jest.fn()
+  const onFinalize = jest.fn()
   render(
     <PaymentStatus
       transaction={null}
@@ -55,10 +56,11 @@ const renderStatus = (
       error={null}
       onRecheck={onRecheck}
       onRetry={onRetry}
+      onFinalize={onFinalize}
       {...props}
     />,
   )
-  return { onRecheck, onRetry }
+  return { onRecheck, onRetry, onFinalize }
 }
 
 describe('PaymentStatus', () => {
@@ -71,6 +73,10 @@ describe('PaymentStatus', () => {
 
     await user.click(screen.getByRole('button', { name: 'Volver a verificar' }))
     expect(onRecheck).toHaveBeenCalledTimes(1)
+    // Finalizar only appears on terminal states, not while confirming.
+    expect(
+      screen.queryByRole('button', { name: 'Finalizar' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the pending confirmation with the reference once the view exists', () => {
@@ -158,6 +164,38 @@ describe('PaymentStatus', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('shows the status-unavailable timeout state with a manual re-check, never a success or a spinner (US2.5)', async () => {
+    const user = userEvent.setup()
+    const { onRecheck, onRetry } = renderStatus({
+      status: 'error',
+      error: createApiError('statusUnavailable'),
+    })
+
+    expect(
+      screen.getByRole('heading', { name: 'El estado del pago no está disponible' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /no pudimos confirmar el estado del pago/i,
+    )
+    // Never a success and never an endless spinner.
+    expect(screen.queryByText('¡Pago aprobado!')).not.toBeInTheDocument()
+    expect(screen.queryByText('Verificando el pago…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Estamos confirmando tu pago')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Volver a verificar' }))
+    expect(onRecheck).toHaveBeenCalledTimes(1)
+    // The timeout does not start a second purchase: no retry action.
+    expect(onRetry).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Intentar de nuevo' }),
+    ).not.toBeInTheDocument()
+    // Finalizar is reserved for a final status returned by the server: the
+    // client-side timeout offers only the manual re-check.
+    expect(
+      screen.queryByRole('button', { name: 'Finalizar' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('rebuilds the error text from the kind and never shows the raw back-end text', () => {
     renderStatus({
       status: 'error',
@@ -172,6 +210,53 @@ describe('PaymentStatus', () => {
     expect(alert).not.toHaveTextContent(/PAYMENT_PROVIDER_UNAVAILABLE/)
     expect(alert).not.toHaveTextContent('/transactions')
   })
+
+  it.each<[ApiErrorKind, RegExp]>([
+    ['network', /conectar/i],
+    ['providerUnavailable', /no está disponible/i],
+    ['providerRejected', /no fue aprobado/i],
+    ['rateLimited', /demasiadas solicitudes/i],
+    ['server', /error inesperado/i],
+    ['badRequest', /revisa los datos/i],
+  ])(
+    'shows its own safe Spanish copy and the retry action for the %s error',
+    async (kind, pattern) => {
+      const user = userEvent.setup()
+      const { onRetry } = renderStatus({ status: 'error', error: createApiError(kind) })
+
+      expect(
+        screen.getByRole('heading', { name: 'No pudimos confirmar el pago' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent(pattern)
+
+      await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
+      expect(onRetry).toHaveBeenCalledTimes(1)
+      // Client-side failures never offer Finalizar: the transaction may still
+      // resolve server-side, so only the retry path is shown.
+      expect(
+        screen.queryByRole('button', { name: 'Finalizar' }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([
+    ['approved', 'APPROVED'],
+    ['declined', 'DECLINED'],
+    ['voided', 'VOIDED'],
+    ['error', 'ERROR'],
+  ] as const)(
+    'offers the terminal Finalizar action when the server returned a final %s status',
+    async (status, transactionStatus) => {
+      const user = userEvent.setup()
+      const { onFinalize } = renderStatus({
+        transaction: buildTransaction({ status: transactionStatus }),
+        status,
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Finalizar' }))
+      expect(onFinalize).toHaveBeenCalledTimes(1)
+    },
+  )
 
   it('warns and shows the server total when the charge amount changed', () => {
     renderStatus({

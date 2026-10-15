@@ -1,6 +1,5 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import {
-  checkoutStepChanged,
   idempotencyKeySet,
   retryAfterFinal,
   startOver,
@@ -50,8 +49,17 @@ export const restoreProgress = createAsyncThunk<
     dispatch(productQuantityChanged(quantity))
     const { transactionId, currentStep } = getState().checkout
     if (transactionId && currentStep === 'finalStatus') {
-      dispatch(checkoutStepChanged('finalStatus'))
-      void dispatch(readTransactionStatus(transactionId))
+      const read = await dispatch(readTransactionStatus(transactionId))
+      if (readTransactionStatus.rejected.match(read)) {
+        const error = read.payload as ApiError | undefined
+        if (error?.kind === 'notFound') {
+          // The server no longer knows this purchase: discard the document.
+          dispatch(startOver())
+          return 'discarded'
+        }
+        // Transient lookup failure: keep the document for a later re-check.
+        return 'transient'
+      }
       return 'verifying'
     }
     return 'kept'
@@ -161,6 +169,21 @@ export const payTransaction = createAsyncThunk<
     return rejectWithValue(result)
   }
   return result
+})
+
+export const finalizeCheckout = createAsyncThunk<
+  void,
+  void,
+  { state: RestoreProgressState }
+>('checkout/finalizeCheckout', async (_arg, { dispatch, getState }) => {
+  // Remember the product before clearing: the stock must be re-read.
+  const productId = getState().checkout.selectedProductId
+  // startOver semantics: the whole checkout progress is cleared and the
+  // persistence subscriber removes the document (never rewrites it).
+  dispatch(startOver())
+  if (productId) {
+    await dispatch(fetchProduct(productId))
+  }
 })
 
 export const readTransactionStatus = createAsyncThunk<

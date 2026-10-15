@@ -21,6 +21,7 @@ import {
 } from '@/features/checkout/checkout.slice'
 import {
   ensureIdempotencyKey,
+  finalizeCheckout,
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
@@ -216,6 +217,13 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
     void dispatch(retryPurchase())
   }
 
+  const handleFinalize = () => {
+    // Clears every local trace and refetches stock; the modal closes back
+    // onto the product page (US4, FR-015, FR-016).
+    void dispatch(finalizeCheckout())
+    close()
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
     if (event.key !== 'Tab') return
     const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE)
@@ -249,6 +257,7 @@ export function CheckoutModal({ open, onClose }: CheckoutModalProps) {
           error={payError ?? paymentError}
           onRecheck={recheckPayment}
           onRetry={retryPayment}
+          onFinalize={handleFinalize}
           priceChanged={priceChanged}
         />
       )

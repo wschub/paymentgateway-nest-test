@@ -17,6 +17,7 @@ const KINDS: ApiErrorKind[] = [
   'providerRejected',
   'providerUnavailable',
   'badRequest',
+  'statusUnavailable',
 ]
 
 describe('api.errors', () => {

@@ -60,6 +60,10 @@ const ACTIONS: Record<ApiErrorKind, ActionSpec> = {
     action: 'acceptContracts',
     actionLabel: 'Acepta ambos contratos',
   },
+  statusUnavailable: {
+    action: 'showStatus',
+    actionLabel: 'Volver a verificar',
+  },
 }
 
 const FALLBACK_KIND: ApiErrorKind = 'server'

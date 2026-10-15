@@ -193,7 +193,12 @@ export const checkoutSlice = createSlice({
       state.installments = INSTALLMENTS_DEFAULT
     },
     restored(state, action: PayloadAction<RestoredPayload>) {
-      state.currentStep = action.payload.currentStep
+      // The summary is never restored directly: a reload at that step goes
+      // back to card entry (the card token is memory-only). (FR-014)
+      state.currentStep =
+        action.payload.currentStep === 'summary'
+          ? 'cardAndDelivery'
+          : action.payload.currentStep
       state.selectedProductId = action.payload.selectedProductId
       state.quantity = action.payload.quantity
       state.delivery = action.payload.delivery

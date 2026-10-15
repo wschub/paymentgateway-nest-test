@@ -11,6 +11,7 @@ export type ApiErrorKind =
   | 'providerRejected'
   | 'providerUnavailable'
   | 'badRequest'
+  | 'statusUnavailable'
 
 export interface ApiError {
   kind: ApiErrorKind
@@ -35,6 +36,8 @@ const SAFE_MESSAGES: Record<ApiErrorKind, string> = {
   providerUnavailable:
     'El servicio de pagos no está disponible. Inténtalo de nuevo en unos momentos.',
   badRequest: 'Revisa los datos ingresados e inténtalo de nuevo.',
+  statusUnavailable:
+    'No pudimos confirmar el estado del pago a tiempo. Puedes verificar el estado de nuevo.',
 }
 
 export function createApiError(kind: ApiErrorKind): ApiError {

@@ -515,6 +515,12 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     })
     expect(statusReads()).toHaveLength(afterCeiling)
 
+    // The client-side timeout offers only the manual re-check: no Finalizar
+    // (reserved for a final status returned by the server).
+    expect(
+      screen.queryByRole('button', { name: 'Finalizar' }),
+    ).not.toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: 'Volver a verificar' }))
     await act(async () => {})
     expect(statusReads()).toHaveLength(afterCeiling + 1)
@@ -583,6 +589,52 @@ describe('CheckoutModal US3 edge cases (end to end)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/precio cambió/i)
     expect(screen.getByText(/90\.000/)).toBeInTheDocument()
   })
+
+  it.each<TransactionStatus>(['APPROVED', 'DECLINED', 'VOIDED', 'ERROR'])(
+    'Finalizar on a %s screen clears every trace, closes the modal and refetches stock',
+    async (status) => {
+      paymentQueue = [
+        {
+          status: 200,
+          body: view(status, {
+            failureReason: status === 'VOIDED' ? 'RESERVATION_EXPIRED' : null,
+          }),
+        },
+      ]
+      const { store, storage } = renderModal()
+      await reachSummaryWithCard()
+      fireEvent.click(screen.getByRole('button', { name: 'Pagar' }))
+
+      // Finalizar is offered on every final status the server returned.
+      const finalize = await screen.findByRole('button', { name: 'Finalizar' })
+
+      const productReadsBefore = ourApiCalls().filter((call) =>
+        /^\/products\//.test(ourApiPath(call)),
+      ).length
+
+      fireEvent.click(finalize)
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+
+      // All local checkout progress is gone (FR-015, US4.4).
+      const cleared = store.getState().checkout
+      expect(cleared.currentStep).toBe('product')
+      expect(cleared.transactionId).toBeNull()
+      expect(cleared.idempotencyKey).toBeNull()
+      expect(cleared.transaction).toBeNull()
+      expect(cleared.paymentError).toBeNull()
+      expect(cleared.paymentStatus).toBe('idle')
+      expect(storage.data[PERSISTENCE_STORAGE_KEY]).toBeUndefined()
+
+      // The product page re-reads its stock from the server (FR-016, SC-006).
+      const productReadsAfter = ourApiCalls().filter((call) =>
+        /^\/products\//.test(ourApiPath(call)),
+      )
+      expect(productReadsAfter.length).toBe(productReadsBefore + 1)
+      // No new purchase was created behind the scenes.
+      expect(createPosts()).toHaveLength(1)
+    },
+  )
 
   it('never leaks the card number or the CVC into state, storage or our API (SC-005)', async () => {
     paymentQueue = [{ status: 200, body: view('APPROVED') }]

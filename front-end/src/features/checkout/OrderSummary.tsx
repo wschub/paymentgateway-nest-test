@@ -60,6 +60,9 @@ export function OrderSummary({
         <p className="text-sm text-gray-600">
           Cantidad: {transaction.quantity}
         </p>
+        <p className="text-sm text-gray-600">
+          Referencia: {transaction.reference}
+        </p>
         {card?.brand && card.lastFour ? (
           <p className="text-sm text-gray-600">
             {card.brand} terminada en {card.lastFour}

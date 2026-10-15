@@ -6,6 +6,7 @@ import productReducer from '@/features/product/product.slice'
 import {
   createTransaction,
   ensureIdempotencyKey,
+  finalizeCheckout,
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
@@ -236,6 +237,91 @@ describe('restoreProgress thunk', () => {
     expect(paths.some((path) => path.endsWith('/payment'))).toBe(false)
     expect(store.getState().checkout.currentStep).toBe('finalStatus')
   })
+
+  it('lands on the final status screen without polling-replay when the lookup resolves a final status (FR-013a)', async () => {
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(buildTransaction({ status: 'APPROVED' }))
+    })
+    const store = makeStore({ ...fullyStartedCheckout(), currentStep: 'finalStatus' })
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('verifying')
+    const checkout = store.getState().checkout
+    expect(checkout.currentStep).toBe('finalStatus')
+    expect(checkout.paymentStatus).toBe('approved')
+    expect(checkout.transaction?.status).toBe('APPROVED')
+  })
+
+  it('discards the document and starts over when the restored transaction is unknown (FR-011)', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(createApiError('notFound'))
+    })
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('discarded')
+    expect(store.getState().checkout.transactionId).toBeNull()
+    expect(store.getState().checkout.idempotencyKey).toBeNull()
+    expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+  })
+
+  it('keeps the document and reports a recovery error when the lookup fails transiently', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(createApiError('network'))
+    })
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('transient')
+    expect(store.getState().checkout.transactionId).toBe(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    )
+    expect(store.getState().checkout.paymentError?.kind).toBe('network')
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(true)
+  })
 })
 
 const CONFIG: CheckoutConfig = {
@@ -331,6 +417,81 @@ describe('loadCheckoutConfig thunk', () => {
   })
 })
 
+describe('finalizeCheckout thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  it('clears every checkout field, removes the persisted document and refetches stock', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockResolvedValue(buildProduct(7))
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+      paymentStatus: 'approved',
+      transaction: buildTransaction({ status: 'APPROVED' }),
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    await store.dispatch(finalizeCheckout()).unwrap()
+
+    // startOver semantics: every checkout field back to the clean state.
+    const cleared = store.getState().checkout
+    expect(cleared.currentStep).toBe('product')
+    expect(cleared.selectedProductId).toBeNull()
+    expect(cleared.transactionId).toBeNull()
+    expect(cleared.idempotencyKey).toBeNull()
+    expect(cleared.delivery).toBeNull()
+    expect(cleared.transaction).toBeNull()
+    expect(cleared.paymentError).toBeNull()
+    expect(cleared.paymentStatus).toBe('idle')
+
+    // The persisted document is removed by the clear and is gone afterwards.
+    expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+
+    // A fresh product read replaces the pre-purchase stock (FR-016, SC-006).
+    expect(mockedHttpRequest).toHaveBeenCalledWith(`/products/${PRODUCT_ID}`, {
+      map400ToNotFound: true,
+    })
+    expect(store.getState().product.product?.stock).toBe(7)
+  })
+
+  it('clears state without fetching when no product was selected', async () => {
+    const store = makeStore({
+      currentStep: 'product',
+      selectedProductId: null,
+      quantity: 1,
+      delivery: null,
+      transactionId: null,
+      idempotencyKey: null,
+      cardBrand: null,
+      cardLastFour: null,
+      installments: 1,
+      contractsAccepted: false,
+      paymentStatus: 'idle',
+      paymentError: null,
+    })
+
+    await store.dispatch(finalizeCheckout()).unwrap()
+
+    expect(mockedHttpRequest).not.toHaveBeenCalled()
+  })
+})
+
 describe('createTransaction thunk', () => {
   beforeEach(() => {
     mockedHttpRequest.mockReset()
@@ -383,7 +544,26 @@ describe('createTransaction thunk', () => {
     })
   })
 
-  it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict'] as const)(
+  it('sends the identical Idempotency-Key header on every retry of the same purchase', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('network'))
+      .mockResolvedValueOnce(buildCreated())
+    const store = makeConfigStore()
+
+    await store.dispatch(createTransaction(args)).unwrap().catch(() => undefined)
+    await store.dispatch(createTransaction(args)).unwrap()
+
+    const keys = mockedHttpRequest.mock.calls.map(
+      ([, options]) =>
+        (options as { headers?: Record<string, string> }).headers?.[
+          'Idempotency-Key'
+        ],
+    )
+    expect(keys).toEqual([args.idempotencyKey, args.idempotencyKey])
+    expect(keys[0]).toMatch(IDEMPOTENCY_KEY_PATTERN)
+  })
+
+  it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict', 'rateLimited'] as const)(
     'rejects with %s',
     async (kind) => {
       mockedHttpRequest.mockResolvedValue(createApiError(kind))
@@ -394,6 +574,24 @@ describe('createTransaction thunk', () => {
       expect(error.kind).toBe(kind)
     },
   )
+
+  it('rejects a 429 rate limit once and never auto-retries (FR-008)', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('rateLimited'))
+      .mockResolvedValueOnce(buildCreated())
+    const store = makeConfigStore()
+
+    const error = await store
+      .dispatch(createTransaction(args))
+      .unwrap()
+      .catch((e) => e)
+
+    // One request only: rate limits are acted on manually, never hammered.
+    expect(error.kind).toBe('rateLimited')
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => path === '/transactions'),
+    ).toHaveLength(1)
+  })
 })
 
 describe('payTransaction thunk', () => {
@@ -440,6 +638,7 @@ describe('payTransaction thunk', () => {
     'providerRejected',
     'providerUnavailable',
     'network',
+    'rateLimited',
   ] as const)('rejects with %s so the caller can act on the token', async (kind) => {
     mockedHttpRequest.mockResolvedValue(createApiError(kind))
     const store = makeStore(startedCheckout())
@@ -466,6 +665,29 @@ describe('payTransaction thunk', () => {
       expect((options as { body: { cardToken: string } }).body.cardToken).toBe('tok_single_use')
     }
     expect(mockedHttpRequest.mock.calls.some(([path]) => path === '/transactions')).toBe(false)
+  })
+  it('rejects a 502 provider rejection once; the shopper, not the thunk, retries it', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('providerRejected'))
+      .mockResolvedValueOnce(buildTransaction())
+    const store = makeStore(startedCheckout())
+
+    const error = await store
+      .dispatch(payTransaction(args))
+      .unwrap()
+      .catch((e) => e)
+
+    // Generic payment-rejected state, no automatic retry of the charged call.
+    expect(error.kind).toBe('providerRejected')
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => String(path).endsWith('/payment')),
+    ).toHaveLength(1)
+
+    // A manual retry re-sends the same token; the server reconciles.
+    await store.dispatch(payTransaction(args)).unwrap()
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => String(path).endsWith('/payment')),
+    ).toHaveLength(2)
   })
 })
 
