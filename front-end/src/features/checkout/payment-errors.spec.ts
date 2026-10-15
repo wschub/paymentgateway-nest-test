@@ -17,6 +17,7 @@ const ALL_KINDS: readonly ApiErrorKind[] = [
   'server',
   'notFound',
   'badRequest',
+  'statusUnavailable',
 ]
 
 describe('describePaymentError', () => {
@@ -76,6 +77,7 @@ describe('describePaymentError', () => {
     ['idempotencyConflict', 'startFresh'],
     ['notFound', 'startFresh'],
     ['contractsNotAccepted', 'acceptContracts'],
+    ['statusUnavailable', 'showStatus'],
   ])('maps %s to the %s next action', (kind, action) => {
     expect(describePaymentError(createApiError(kind))!.action).toBe(action)
   })
@@ -111,5 +113,14 @@ describe('describePaymentError', () => {
     expect(guidance.message).toMatch(/no está disponible/i)
     expect(guidance.action).toBe('retry')
     expect(guidance.actionLabel).toBe('Reintentar')
+  })
+
+  it('maps the polling-ceiling timeout to the status-unavailable copy with a re-check action', () => {
+    const guidance = describePaymentError(createApiError('statusUnavailable'))!
+
+    expect(guidance.kind).toBe('statusUnavailable')
+    expect(guidance.message).toMatch(/estado del pago/i)
+    expect(guidance.action).toBe('showStatus')
+    expect(guidance.actionLabel).toBe('Volver a verificar')
   })
 })

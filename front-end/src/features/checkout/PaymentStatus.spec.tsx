@@ -164,6 +164,33 @@ describe('PaymentStatus', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('shows the status-unavailable timeout state with a manual re-check, never a success or a spinner (US2.5)', async () => {
+    const user = userEvent.setup()
+    const { onRecheck, onRetry } = renderStatus({
+      status: 'error',
+      error: createApiError('statusUnavailable'),
+    })
+
+    expect(
+      screen.getByRole('heading', { name: 'El estado del pago no está disponible' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /no pudimos confirmar el estado del pago/i,
+    )
+    // Never a success and never an endless spinner.
+    expect(screen.queryByText('¡Pago aprobado!')).not.toBeInTheDocument()
+    expect(screen.queryByText('Verificando el pago…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Estamos confirmando tu pago')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Volver a verificar' }))
+    expect(onRecheck).toHaveBeenCalledTimes(1)
+    // The timeout does not start a second purchase: no retry action.
+    expect(onRetry).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Intentar de nuevo' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('rebuilds the error text from the kind and never shows the raw back-end text', () => {
     renderStatus({
       status: 'error',
