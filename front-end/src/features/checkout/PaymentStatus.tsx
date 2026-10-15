@@ -78,10 +78,17 @@ export function PaymentStatus({
   )
 
   if (status === 'error') {
+    // The polling window ended without a final status: the outcome is unknown
+    // client-side. Show the status-unavailable state (US2.5) with a manual
+    // re-check (GET /transactions/:id) instead of pretending success or
+    // spinning forever, and release the lock so the shopper can act.
+    const statusUnavailable = guidance?.kind === 'statusUnavailable'
     return shell(
       <>
         <h3 className="text-lg font-semibold text-gray-900">
-          No pudimos confirmar el pago
+          {statusUnavailable
+            ? 'El estado del pago no está disponible'
+            : 'No pudimos confirmar el pago'}
         </h3>
         <p role="alert" className="text-base text-red-700">
           {guidance?.message ??
@@ -89,7 +96,7 @@ export function PaymentStatus({
         </p>
         <div className="flex gap-3">
           {finalizeButton}
-          {retryButton}
+          {statusUnavailable ? recheckButton : retryButton}
         </div>
       </>,
     )

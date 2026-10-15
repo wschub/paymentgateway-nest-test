@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { makeStore, type AppStore, type RootState } from '@/app/store'
 import { usePaymentPolling } from '@/features/checkout/usePaymentPolling'
+import { readTransactionStatus } from '@/features/checkout/checkout.thunks'
 import type {
   TransactionStatus,
   TransactionView,
@@ -187,6 +188,32 @@ describe('usePaymentPolling', () => {
     await flush()
 
     expect(mockedHttpRequest.mock.calls.length).toBe(atCeiling)
+  })
+
+  it('resumes polling under a fresh window after a manual re-check following the ceiling', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction('PENDING'))
+    const { store } = renderPolling('pending')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_CEILING_MS)
+    })
+    await flush()
+    expect(store.getState().checkout.paymentStatus).toBe('error')
+
+    // The shopper presses "Volver a verificar": one manual read of the real status.
+    await act(async () => {
+      await store.dispatch(readTransactionStatus(TRANSACTION_ID))
+    })
+    expect(store.getState().checkout.paymentStatus).toBe('pending')
+
+    const beforeRestart = mockedHttpRequest.mock.calls.length
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS)
+    })
+    await flush()
+
+    // Still PENDING: a fresh window resumes polling from the manual re-check.
+    expect(mockedHttpRequest.mock.calls.length).toBe(beforeRestart + 1)
   })
 
   it('cancels the interval on unmount', async () => {
