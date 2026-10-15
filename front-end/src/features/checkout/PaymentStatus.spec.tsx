@@ -189,6 +189,11 @@ describe('PaymentStatus', () => {
     expect(
       screen.queryByRole('button', { name: 'Intentar de nuevo' }),
     ).not.toBeInTheDocument()
+    // Finalizar is reserved for a final status returned by the server: the
+    // client-side timeout offers only the manual re-check.
+    expect(
+      screen.queryByRole('button', { name: 'Finalizar' }),
+    ).not.toBeInTheDocument()
   })
 
   it('rebuilds the error text from the kind and never shows the raw back-end text', () => {
@@ -226,15 +231,25 @@ describe('PaymentStatus', () => {
 
       await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
       expect(onRetry).toHaveBeenCalledTimes(1)
+      // Client-side failures never offer Finalizar: the transaction may still
+      // resolve server-side, so only the retry path is shown.
+      expect(
+        screen.queryByRole('button', { name: 'Finalizar' }),
+      ).not.toBeInTheDocument()
     },
   )
 
-  it.each(['approved', 'declined', 'voided', 'error'] as const)(
-    'offers the terminal Finalizar action on the %s screen',
-    async (status) => {
+  it.each([
+    ['approved', 'APPROVED'],
+    ['declined', 'DECLINED'],
+    ['voided', 'VOIDED'],
+    ['error', 'ERROR'],
+  ] as const)(
+    'offers the terminal Finalizar action when the server returned a final %s status',
+    async (status, transactionStatus) => {
       const user = userEvent.setup()
       const { onFinalize } = renderStatus({
-        transaction: status === 'error' ? null : buildTransaction(),
+        transaction: buildTransaction({ status: transactionStatus }),
         status,
       })
 
