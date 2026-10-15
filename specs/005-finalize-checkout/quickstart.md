@@ -104,9 +104,9 @@ sandbox). Each scenario maps to spec requirements; the expected behavior always 
 
 > Executed on 2026-10-15 against the local stack (`docker compose` Postgres equivalent local,
 > `back-end npm run start:dev` on :3000, `front-end npm run dev` on :5173, headless browser session
-> driving the real UI). Suite evidence: `front-end` 40 suites / 528 tests green, coverage 98.42 %
-> stmts / 95.88 % branches / 96.32 % funcs / 97.98 % lines; `back-end` untouched, lint + build +
-> 54 suites green, coverage 96.39 % / 90.73 % / 100 % / 96.21 %.
+> driving the real UI). Suite evidence (after the T040/T041 convergence pass): `front-end` 40 suites /
+> 536 tests green, coverage 97.99 % stmts / 95.79 % branches / 96.34 % funcs / 98.43 % lines;
+> `back-end` untouched, lint + build + 54 suites green, coverage 96.39 % / 90.73 % / 100 % / 96.21 %.
 
 | # | Scenario | Result |
 |---|----------|--------|
@@ -117,7 +117,7 @@ sandbox). Each scenario maps to spec requirements; the expected behavior always 
 | 5 | Rate-limited 429 (US2.3, FR-008) | ✅ Automated: `rateLimited` rechaza una sola vez, sin auto-retry (`checkout.thunks.spec.ts`) |
 | 6 | No disponible 503 / offline (US2.4, FR-008) | ✅ Automated: estados `providerUnavailable`/`network` con retry manual; copia genérica en español (`PaymentStatus.spec.tsx`, `payment-errors.spec.ts`) |
 | 7 | Polling timeout 40 s (US2.5, FR-007, SC-003) | ✅ Automated con fake timers: cadencia 2 s, techo 40 s, parada al primer estado final y, al expirar el techo sin estado final, el estado **status-unavailable** reemplaza el spinner (nunca un éxito) con acción manual **Volver a verificar** que repite `GET /transactions/:id` bajo una ventana nueva y libera el lock (`usePaymentPolling.spec.tsx`, `PaymentStatus.spec.tsx`, `payment-errors.spec.ts`) |
-| 8 | Recargas en cada paso (US3, FR-009..FR-014, SC-005) | ✅ Live: recarga en resumen → documento v2 persistido (`currentStep: summary`, `transactionId`, `idempotencyKey`), "Continuar compra" vuelve a **card entry** (nunca al resumen), idempotencia conservada; matriz 404/versión ≠ 2/corrupto cubierta en `persistence.spec.ts` + `checkout.thunks.spec.ts` (0 creates duplicados) |
+| 8 | Recargas en cada paso (US3, FR-009..FR-014, SC-005) | ✅ Live: recarga en resumen → documento v2 persistido (`currentStep: summary`, `transactionId`, `idempotencyKey`); en el arranque `createAppStore` remapea el paso a **card entry** antes de llegar al store (T041), y "Continuar compra" abre el modal ya en card entry (nunca al resumen) conservando la idempotencia; matriz 404/versión ≠ 2/corrupto cubierta en `persistence.spec.ts` + `checkout.thunks.spec.ts` (0 creates duplicados) |
 | 9 | Finalizar (US4, FR-015/016, SC-006) | ✅ Live: botón Finalizar en pantallas aprobadas/rechazadas; localStorage sin `checkout-progress`; vuelta a product page con stock refetheado (14 → unidad descontada y 14 → liberada al declinar) |
 | 10 | Montos nunca recomputados/enviados (FR-003, contract §5) | ✅ Automated: body sin campos de monto (`expect(JSON.stringify(body)).not.toMatch(/amount/i)`); rendereo verbatim del fixture |
 | 11 | Privacidad e idioma (FR-017) | ✅ Automated: `checkout.slice.spec.ts` (CARD_LIKE), `CheckoutModal.integration.spec.tsx` ("never leaks the card number or the CVC"), diálogo `w-[calc(100vw-2rem)] max-w-lg` (375×667 sin overflow); copia UI en español observada en vivo |
