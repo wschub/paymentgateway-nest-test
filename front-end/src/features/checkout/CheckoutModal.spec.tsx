@@ -444,6 +444,44 @@ describe('CheckoutModal', () => {
     ).toHaveLength(1)
   })
 
+  it('keeps Pagar disabled for the whole in-flight window even under repeated taps', async () => {
+    let resolvePay: (value: unknown) => void = () => undefined
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path === '/payments/checkout-config') return Promise.resolve(CONFIG)
+      if (String(path).endsWith('/payment')) {
+        return new Promise((resolve) => {
+          resolvePay = resolve
+        })
+      }
+      return Promise.resolve(paidTransaction)
+    })
+    renderModal()
+
+    await reachSummary(userEvent.setup())
+    fireEvent.click(screen.getByRole('button', { name: 'Pagar (simulado)' }))
+
+    // While the payment is in flight the button is disabled (FR-004).
+    const busyButton = await screen.findByRole('button', {
+      name: 'Procesando (simulado)',
+    })
+    expect(busyButton).toBeDisabled()
+    expect(mockSummaryProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paying: true }),
+    )
+    fireEvent.click(busyButton)
+
+    await act(async () => {
+      resolvePay(paidTransaction)
+    })
+
+    // Exactly one in-flight request per purchase attempt (SC-002).
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) =>
+        String(path).endsWith('/payment'),
+      ),
+    ).toHaveLength(1)
+  })
+
   it('shows the checkout fallback instead of a blank page when a step render throws', async () => {
     const user = userEvent.setup()
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})

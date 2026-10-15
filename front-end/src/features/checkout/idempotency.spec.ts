@@ -127,6 +127,25 @@ describe('assertValidKey', () => {
     expect(assertValidKey('abcdefghijklmnop')).toBe('abcdefghijklmnop')
   })
 
+  it('accepts a 64-character key (upper boundary)', () => {
+    const key = 'a'.repeat(64)
+    expect(assertValidKey(key)).toBe(key)
+  })
+
+  it('throws when the key is shorter than 16 characters', () => {
+    expect(() => assertValidKey('a'.repeat(15))).toThrow(/formato requerido/i)
+  })
+
+  it('throws when the key exceeds 64 characters', () => {
+    expect(() => assertValidKey('a'.repeat(65))).toThrow(/formato requerido/i)
+  })
+
+  it('throws when the key has characters outside [A-Za-z0-9_-]', () => {
+    expect(() => assertValidKey('key.with+invalid/chars!')).toThrow(
+      /formato requerido/i,
+    )
+  })
+
   it('throws when the key does not match the pattern', () => {
     expect(() => assertValidKey('too-short')).toThrow(/formato requerido/i)
   })

@@ -137,6 +137,27 @@ describe('usePaymentPolling', () => {
     expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
   })
 
+  it('stops polling immediately when the first read resolves DECLINED', async () => {
+    mockedHttpRequest.mockResolvedValue(buildTransaction('DECLINED'))
+    const { store } = renderPolling('pending')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS)
+    })
+    await flush()
+
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+    expect(store.getState().checkout.paymentStatus).toBe('declined')
+
+    await act(async () => {
+      jest.advanceTimersByTime(STATUS_POLL_INTERVAL_MS * 5)
+    })
+    await flush()
+
+    // A first-poll final status ends polling with no extra request (SC-003).
+    expect(mockedHttpRequest).toHaveBeenCalledTimes(1)
+  })
+
   it('stops at the ceiling and leaves the pending state for a manual re-check', async () => {
     mockedHttpRequest.mockResolvedValue(buildTransaction('PENDING'))
     const { store } = renderPolling('pending')

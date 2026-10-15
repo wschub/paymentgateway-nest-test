@@ -383,6 +383,25 @@ describe('createTransaction thunk', () => {
     })
   })
 
+  it('sends the identical Idempotency-Key header on every retry of the same purchase', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('network'))
+      .mockResolvedValueOnce(buildCreated())
+    const store = makeConfigStore()
+
+    await store.dispatch(createTransaction(args)).unwrap().catch(() => undefined)
+    await store.dispatch(createTransaction(args)).unwrap()
+
+    const keys = mockedHttpRequest.mock.calls.map(
+      ([, options]) =>
+        (options as { headers?: Record<string, string> }).headers?.[
+          'Idempotency-Key'
+        ],
+    )
+    expect(keys).toEqual([args.idempotencyKey, args.idempotencyKey])
+    expect(keys[0]).toMatch(IDEMPOTENCY_KEY_PATTERN)
+  })
+
   it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict'] as const)(
     'rejects with %s',
     async (kind) => {
