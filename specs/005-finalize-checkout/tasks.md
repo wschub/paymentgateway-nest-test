@@ -111,13 +111,13 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 - [X] T022 [P] [US3] Extend persistence tests in `front-end/src/features/checkout/persistence.spec.ts`: version-2 whitelist retained; version ≠ 2, bad shape, bad `idempotencyKey`, staleness > 24 h and corrupted storage discarded; no card-like key ever serialized (FR-009, FR-012; data-model "Discard / clear triggers")
 - [X] T023 [P] [US3] Extend recovery tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: valid doc + `transactionId` triggers `readTransactionStatus` (GET /transactions/:id) **before** resume (FR-010); 200 PENDING → `finalStatus` + polling under a **fresh** 2 s/40 s window measured from the resume (FR-013, clarified 2026-10-14); 200 FINAL → `finalStatus` showing that outcome without polling (FR-013a, clarified 2026-10-14); 404 → document discarded + `startOver` (FR-011); transient lookup failure → recovery error with retry and the document KEPT; zero duplicate creates across reloads (SC-005)
-- [ ] T024 [P] [US3] Extend step-remap tests in `front-end/src/features/checkout/checkout.slice.spec.ts`: a restored `summary` step becomes `cardAndDelivery` — the summary is never restored directly (FR-014; research R3)
+- [X] T024 [P] [US3] Extend step-remap tests in `front-end/src/features/checkout/checkout.slice.spec.ts`: a restored `summary` step becomes `cardAndDelivery` — the summary is never restored directly (FR-014; research R3)
 
 ### Implementation for User Story 3
 
 - [X] T025 [US3] Implement the 404-on-lookup → discard document + `startOver` branch and the transient-failure → recovery-error-keeps-document branch in `restoreProgress`/`readTransactionStatus` handling in `front-end/src/features/checkout/checkout.thunks.ts` (depends on T023)
-- [ ] T026 [US3] Implement the `summary` → `cardAndDelivery` restore remap in `front-end/src/features/checkout/checkout.slice.ts`/`checkout.thunks.ts` and keep the summary-never-restored guard in `front-end/src/features/checkout/CheckoutModal.tsx` (depends on T024)
-- [ ] T027 [US3] Add a selector for terminal step / has-progress in `front-end/src/features/checkout/checkout.selectors.ts` only if the recovery branches above need it (research: minimal)
+- [X] T026 [US3] Implement the `summary` → `cardAndDelivery` restore remap in `front-end/src/features/checkout/checkout.slice.ts`/`checkout.thunks.ts` and keep the summary-never-restored guard in `front-end/src/features/checkout/CheckoutModal.tsx` (depends on T024)
+- [X] T027 [US3] Add a selector for terminal step / has-progress in `front-end/src/features/checkout/checkout.selectors.ts` only if the recovery branches above need it (research: minimal)
 
 **Checkpoint**: The full reload-recovery matrix passes — zero duplicate transactions in every reload scenario
 

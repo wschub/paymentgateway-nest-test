@@ -59,7 +59,8 @@ describe('checkout.selectors', () => {
     )
     const state = store.getState()
 
-    expect(selectCheckoutStep(state)).toBe('summary')
+    // The restored summary step lands on card entry (FR-014).
+    expect(selectCheckoutStep(state)).toBe('cardAndDelivery')
     expect(selectDeliveryDetails(state)).toMatchObject({
       fullName: 'Ana Pérez',
       city: 'Bogotá',
