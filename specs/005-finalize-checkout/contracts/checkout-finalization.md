@@ -104,7 +104,9 @@ PENDING ──poll every 2 s──▶ PENDING | APPROVED | DECLINED | VOIDED | E
 | polling ceiling (40 s) | — | (client-side timeout) | status-unavailable state; status may resolve later via recovery |
 
 Each state releases the in-flight lock, shows generic Spanish copy and offers a retry/back action matching
-US2 and FR-008; per-code distinctness and lock release are asserted in tests (SC-004).
+US2 and FR-008; per-code distinctness and lock release are asserted in tests (SC-004). Client-side failure
+states **never** offer **Finalizar**: it is reserved for the final statuses the server returns
+(`APPROVED` / `DECLINED` / `VOIDED` / `ERROR`, §6).
 
 ## 4. Refresh-recovery contract (fetch-in of steps)
 
@@ -143,7 +145,8 @@ server lookup), and no resumed journey that skips the server status check (FR-01
 
 | Obligation | Implementation |
 |------------|----------------|
-| Trigger | Finalizar button on any terminal final-status screen (approved / declined / voided / error) |
+| Trigger | Finalizar button only when `GET /transactions/:id` (or the pay response) returned a final status: `APPROVED` / `DECLINED` / `VOIDED` / `ERROR` |
+| Not offered on | client-side failure states — polling timeout (`statusUnavailable`), `network`, `429`, `502`, `503`, other 5xx; the transaction may still resolve server-side, so only the retry/re-check path is shown (US2.5) |
 | Clear persisted document | remove the `checkout-progress` document (FR-015) |
 | Clear in-memory progress | `startOver` semantics: step `product`; `transactionId`, `idempotencyKey`, `delivery`, `transaction`, `paymentError` cleared; `paymentStatus` back to `idle`; card display state already memory-only |
 | Navigate | land on the product page |
