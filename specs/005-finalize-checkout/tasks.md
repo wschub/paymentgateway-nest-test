@@ -64,7 +64,7 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 > **NOTE: Write/extend these tests FIRST, ensure they FAIL (or document that the existing assertion already locks the behavior) before any implementation change**
 
-- [ ] T009 [P] [US1] Extend exact-amount rendering tests in `front-end/src/features/checkout/OrderSummary.spec.tsx`: render with a fixed `TransactionCreated` fixture and assert `productAmountInCents`, `baseFeeInCents`, `deliveryFeeInCents`, `totalInCents`, product and quantity match the fixture verbatim (formatting only, zero recomputation) inside the `<dialog>` backdrop, and that `reference` (format `TXN-` + 16 characters, per `specs/002-transacciones-pagos/contracts/rest-api.md`) is displayed verbatim as returned (SC-001, FR-002, FR-003)
+- [X] T009 [P] [US1] Extend exact-amount rendering tests in `front-end/src/features/checkout/OrderSummary.spec.tsx`: render with a fixed `TransactionCreated` fixture and assert `productAmountInCents`, `baseFeeInCents`, `deliveryFeeInCents`, `totalInCents`, product and quantity match the fixture verbatim (formatting only, zero recomputation) inside the `<dialog>` backdrop, and that `reference` (format `TXN-` + 16 characters, per `specs/002-transacciones-pagos/contracts/rest-api.md`) is displayed verbatim as returned (SC-001, FR-002, FR-003)
 - [ ] T010 [P] [US1] Extend in-flight lock tests in `front-end/src/features/checkout/CheckoutModal.spec.tsx`: rapid double-taps on Continuar/Pagar leave the button disabled while `paymentStatus ∈ {creating, paying, pending}` and produce exactly one `fetch` per action (SC-002, FR-004)
 - [ ] T011 [P] [US1] Assert in `front-end/src/features/checkout/checkout.thunks.spec.ts` that `createTransaction` sends the `Idempotency-Key` header (identical on retry), `payTransaction` sends exactly `{ cardToken, installments, acceptedContracts: true }`, and both 200 and 202 advance the flow (FR-001, FR-005, FR-006)
 - [ ] T012 [P] [US1] Extend polling tests with fake timers in `front-end/src/features/checkout/usePaymentPolling.spec.tsx` asserting cadence and ceiling against the exported constants: one `GET /transactions/:id` every 2000 ms (±10 %), stop on the first final status with no extra request (first-poll DECLINED included), 40000 ms ceiling (SC-003, FR-007)
@@ -72,7 +72,7 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Fix any gap exposed by T009 in `front-end/src/features/checkout/OrderSummary.tsx` so the summary renders the server `amounts` block verbatim with guarded enrichment reads (research R10)
+- [X] T014 [US1] Fix any gap exposed by T009 in `front-end/src/features/checkout/OrderSummary.tsx` so the summary renders the server `amounts` block verbatim with guarded enrichment reads (research R10)
 - [ ] T015 [US1] Fix any gap exposed by T010/T011 in `front-end/src/features/checkout/checkout.thunks.ts` and `front-end/src/features/checkout/CheckoutModal.tsx` (in-flight lock derived from `paymentStatus`; header/payload exactness; 200/202 handling) — keep all HTTP in `shared/api/`
 - [ ] T016 [US1] Fix any gap exposed by T012 in `front-end/src/features/checkout/usePaymentPolling.ts` (cadence/ceiling/stop conditions only; constants stay in `front-end/src/shared/constants.ts`)
 

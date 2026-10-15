@@ -6,7 +6,7 @@ import type { TransactionView } from '@/features/checkout/checkout.types'
 
 const TRANSACTION: TransactionView = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  reference: 'REF-0001',
+  reference: 'TXN-7K3F9Q2M8XJA4B6C',
   status: 'PENDING',
   quantity: 2,
   amounts: {
@@ -24,7 +24,7 @@ const TRANSACTION: TransactionView = {
 /** Literal `POST /transactions` 201 body: only the creation fields. */
 const CREATED: TransactionView = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  reference: 'REF-0001',
+  reference: 'TXN-7K3F9Q2M8XJA4B6C',
   status: 'PENDING',
   quantity: 2,
   amounts: {
@@ -69,6 +69,14 @@ describe('OrderSummary', () => {
     expect(screen.getByText('Calle 10 #23')).toBeInTheDocument()
     expect(screen.getByText(/\$\s*35\.150/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pagar' })).toBeInTheDocument()
+  })
+
+  it('shows the server reference verbatim, even before any enrichment (TXN- + 16 chars)', () => {
+    render(<OrderSummary transaction={CREATED} paying={false} onPay={() => {}} />)
+
+    // The reference is server-generated; the client displays it as-is.
+    expect(screen.getByText(/TXN-7K3F9Q2M8XJA4B6C/)).toBeInTheDocument()
+    expect(CREATED.reference).toMatch(/^TXN-[A-Za-z0-9]{16}$/)
   })
 
   it('does not crash and still shows the amounts with no product or delivery at all', () => {
