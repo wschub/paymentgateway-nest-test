@@ -78,11 +78,16 @@ export function PaymentStatus({
   )
 
   if (status === 'error') {
-    // The polling window ended without a final status: the outcome is unknown
-    // client-side. Show the status-unavailable state (US2.5) with a manual
-    // re-check (GET /transactions/:id) instead of pretending success or
-    // spinning forever, and release the lock so the shopper can act.
+    // Two different situations share the `error` status:
+    //   - a final ERROR status returned by the server through
+    //     `GET /transactions/:id` / the pay response (no `ApiError`) → terminal,
+    //     so it offers Finalizar (FR-013a, FR-015, US4);
+    //   - a client-side failure (the 40 s polling timeout `statusUnavailable`,
+    //     `network`, `429`, `502`, `503`, …) reported as a typed `ApiError` → not
+    //     a final status: the transaction may still resolve server-side, so the
+    //     shopper only gets the retry/re-check path and never Finalizar (US2.5).
     const statusUnavailable = guidance?.kind === 'statusUnavailable'
+    const fromServerFinalStatus = error === null
     return shell(
       <>
         <h3 className="text-lg font-semibold text-gray-900">
@@ -95,7 +100,7 @@ export function PaymentStatus({
             'Ocurrió un error inesperado. Inténtalo de nuevo en unos momentos.'}
         </p>
         <div className="flex gap-3">
-          {finalizeButton}
+          {fromServerFinalStatus ? finalizeButton : null}
           {statusUnavailable ? recheckButton : retryButton}
         </div>
       </>,
