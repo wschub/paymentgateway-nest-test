@@ -163,6 +163,21 @@ export const payTransaction = createAsyncThunk<
   return result
 })
 
+export const finalizeCheckout = createAsyncThunk<
+  void,
+  void,
+  { state: RestoreProgressState }
+>('checkout/finalizeCheckout', async (_arg, { dispatch, getState }) => {
+  // Remember the product before clearing: the stock must be re-read.
+  const productId = getState().checkout.selectedProductId
+  // startOver semantics: the whole checkout progress is cleared and the
+  // persistence subscriber removes the document (never rewrites it).
+  dispatch(startOver())
+  if (productId) {
+    await dispatch(fetchProduct(productId))
+  }
+})
+
 export const readTransactionStatus = createAsyncThunk<
   TransactionView,
   string,

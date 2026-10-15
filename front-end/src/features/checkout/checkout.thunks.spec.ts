@@ -6,6 +6,7 @@ import productReducer from '@/features/product/product.slice'
 import {
   createTransaction,
   ensureIdempotencyKey,
+  finalizeCheckout,
   loadCheckoutConfig,
   payTransaction,
   readTransactionStatus,
@@ -328,6 +329,81 @@ describe('loadCheckoutConfig thunk', () => {
     expect(store.getState().checkoutConfig.status).toBe('error')
     expect(store.getState().checkoutConfig.error?.kind).toBe('providerUnavailable')
     expect(store.getState().checkoutConfig.config).toBeNull()
+  })
+})
+
+describe('finalizeCheckout thunk', () => {
+  beforeEach(() => {
+    mockedHttpRequest.mockReset()
+  })
+
+  it('clears every checkout field, removes the persisted document and refetches stock', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockResolvedValue(buildProduct(7))
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+      paymentStatus: 'approved',
+      transaction: buildTransaction({ status: 'APPROVED' }),
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    await store.dispatch(finalizeCheckout()).unwrap()
+
+    // startOver semantics: every checkout field back to the clean state.
+    const cleared = store.getState().checkout
+    expect(cleared.currentStep).toBe('product')
+    expect(cleared.selectedProductId).toBeNull()
+    expect(cleared.transactionId).toBeNull()
+    expect(cleared.idempotencyKey).toBeNull()
+    expect(cleared.delivery).toBeNull()
+    expect(cleared.transaction).toBeNull()
+    expect(cleared.paymentError).toBeNull()
+    expect(cleared.paymentStatus).toBe('idle')
+
+    // The persisted document is removed by the clear and is gone afterwards.
+    expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+
+    // A fresh product read replaces the pre-purchase stock (FR-016, SC-006).
+    expect(mockedHttpRequest).toHaveBeenCalledWith(`/products/${PRODUCT_ID}`, {
+      map400ToNotFound: true,
+    })
+    expect(store.getState().product.product?.stock).toBe(7)
+  })
+
+  it('clears state without fetching when no product was selected', async () => {
+    const store = makeStore({
+      currentStep: 'product',
+      selectedProductId: null,
+      quantity: 1,
+      delivery: null,
+      transactionId: null,
+      idempotencyKey: null,
+      cardBrand: null,
+      cardLastFour: null,
+      installments: 1,
+      contractsAccepted: false,
+      paymentStatus: 'idle',
+      paymentError: null,
+    })
+
+    await store.dispatch(finalizeCheckout()).unwrap()
+
+    expect(mockedHttpRequest).not.toHaveBeenCalled()
   })
 })
 

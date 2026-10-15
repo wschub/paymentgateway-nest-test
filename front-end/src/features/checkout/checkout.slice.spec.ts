@@ -337,6 +337,22 @@ describe('checkout slice', () => {
     expect(completed).toEqual(cleanState)
   })
 
+  it('startOver (the finalize clear) drops an in-flight transaction and any error', () => {
+    let inFlight = checkoutSlice.reducer(
+      validRestoredState,
+      transactionReceived(buildTransactionView({ id: 'tx-9' })),
+    )
+    inFlight = checkoutSlice.reducer(
+      inFlight,
+      paymentFailed(createApiError('network')),
+    )
+    expect(inFlight.paymentStatus).toBe('error')
+
+    const cleared = checkoutSlice.reducer(inFlight, startOver())
+    expect(cleared).toEqual(cleanState)
+    expectNoCardLikeKeys(cleared)
+  })
+
   it('clears the final transaction but keeps the purchase on retryAfterFinal', () => {
     let state = checkoutSlice.reducer(
       undefined,
