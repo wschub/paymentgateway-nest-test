@@ -237,6 +237,91 @@ describe('restoreProgress thunk', () => {
     expect(paths.some((path) => path.endsWith('/payment'))).toBe(false)
     expect(store.getState().checkout.currentStep).toBe('finalStatus')
   })
+
+  it('lands on the final status screen without polling-replay when the lookup resolves a final status (FR-013a)', async () => {
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(buildTransaction({ status: 'APPROVED' }))
+    })
+    const store = makeStore({ ...fullyStartedCheckout(), currentStep: 'finalStatus' })
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('verifying')
+    const checkout = store.getState().checkout
+    expect(checkout.currentStep).toBe('finalStatus')
+    expect(checkout.paymentStatus).toBe('approved')
+    expect(checkout.transaction?.status).toBe('APPROVED')
+  })
+
+  it('discards the document and starts over when the restored transaction is unknown (FR-011)', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(createApiError('notFound'))
+    })
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('discarded')
+    expect(store.getState().checkout.transactionId).toBeNull()
+    expect(store.getState().checkout.idempotencyKey).toBeNull()
+    expect(storage.removeItem).toHaveBeenCalledWith(PERSISTENCE_STORAGE_KEY)
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(false)
+  })
+
+  it('keeps the document and reports a recovery error when the lookup fails transiently', async () => {
+    const map = new Map<string, string>()
+    const storage: StorageLike = {
+      getItem: (key) => (map.has(key) ? map.get(key)! : null),
+      setItem: jest.fn((key, value) => void map.set(key, value)),
+      removeItem: jest.fn((key) => void map.delete(key)),
+    }
+    mockedHttpRequest.mockImplementation((path: string) => {
+      if (path.startsWith('/products/')) return Promise.resolve(buildProduct(10))
+      return Promise.resolve(createApiError('network'))
+    })
+    const store = makeStore({
+      ...fullyStartedCheckout(),
+      currentStep: 'finalStatus',
+    })
+    map.set(
+      PERSISTENCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        savedAt: new Date().toISOString(),
+        ...fullyStartedCheckout(),
+      }),
+    )
+    subscribeCheckoutProgress(store, storage)
+
+    const outcome = await store.dispatch(restoreProgress()).unwrap()
+
+    expect(outcome).toBe('transient')
+    expect(store.getState().checkout.transactionId).toBe(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    )
+    expect(store.getState().checkout.paymentError?.kind).toBe('network')
+    expect(map.has(PERSISTENCE_STORAGE_KEY)).toBe(true)
+  })
 })
 
 const CONFIG: CheckoutConfig = {

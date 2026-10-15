@@ -1,6 +1,5 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import {
-  checkoutStepChanged,
   idempotencyKeySet,
   retryAfterFinal,
   startOver,
@@ -50,8 +49,17 @@ export const restoreProgress = createAsyncThunk<
     dispatch(productQuantityChanged(quantity))
     const { transactionId, currentStep } = getState().checkout
     if (transactionId && currentStep === 'finalStatus') {
-      dispatch(checkoutStepChanged('finalStatus'))
-      void dispatch(readTransactionStatus(transactionId))
+      const read = await dispatch(readTransactionStatus(transactionId))
+      if (readTransactionStatus.rejected.match(read)) {
+        const error = read.payload as ApiError | undefined
+        if (error?.kind === 'notFound') {
+          // The server no longer knows this purchase: discard the document.
+          dispatch(startOver())
+          return 'discarded'
+        }
+        // Transient lookup failure: keep the document for a later re-check.
+        return 'transient'
+      }
       return 'verifying'
     }
     return 'kept'
