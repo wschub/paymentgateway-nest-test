@@ -80,7 +80,12 @@ export function toPersistedDocument(
 
 export function toCheckoutState(doc: StorableCheckout): CheckoutState {
   return {
-    currentStep: doc.currentStep,
+    // The summary is never restored directly: a reload at that step returns
+    // the shopper to card entry, because the single-use card token lives only
+    // in CheckoutModal memory (FR-014). This remap runs on the production
+    // startup path (createAppStore), before the state reaches the store.
+    currentStep:
+      doc.currentStep === 'summary' ? 'cardAndDelivery' : doc.currentStep,
     selectedProductId: doc.selectedProductId,
     quantity: doc.quantity,
     delivery: doc.delivery,
