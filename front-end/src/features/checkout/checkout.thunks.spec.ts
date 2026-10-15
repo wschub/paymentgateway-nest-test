@@ -402,7 +402,7 @@ describe('createTransaction thunk', () => {
     expect(keys[0]).toMatch(IDEMPOTENCY_KEY_PATTERN)
   })
 
-  it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict'] as const)(
+  it.each(['soldOut', 'notFound', 'badRequest', 'idempotencyConflict', 'rateLimited'] as const)(
     'rejects with %s',
     async (kind) => {
       mockedHttpRequest.mockResolvedValue(createApiError(kind))
@@ -413,6 +413,24 @@ describe('createTransaction thunk', () => {
       expect(error.kind).toBe(kind)
     },
   )
+
+  it('rejects a 429 rate limit once and never auto-retries (FR-008)', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('rateLimited'))
+      .mockResolvedValueOnce(buildCreated())
+    const store = makeConfigStore()
+
+    const error = await store
+      .dispatch(createTransaction(args))
+      .unwrap()
+      .catch((e) => e)
+
+    // One request only: rate limits are acted on manually, never hammered.
+    expect(error.kind).toBe('rateLimited')
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => path === '/transactions'),
+    ).toHaveLength(1)
+  })
 })
 
 describe('payTransaction thunk', () => {
@@ -459,6 +477,7 @@ describe('payTransaction thunk', () => {
     'providerRejected',
     'providerUnavailable',
     'network',
+    'rateLimited',
   ] as const)('rejects with %s so the caller can act on the token', async (kind) => {
     mockedHttpRequest.mockResolvedValue(createApiError(kind))
     const store = makeStore(startedCheckout())
@@ -485,6 +504,29 @@ describe('payTransaction thunk', () => {
       expect((options as { body: { cardToken: string } }).body.cardToken).toBe('tok_single_use')
     }
     expect(mockedHttpRequest.mock.calls.some(([path]) => path === '/transactions')).toBe(false)
+  })
+  it('rejects a 502 provider rejection once; the shopper, not the thunk, retries it', async () => {
+    mockedHttpRequest
+      .mockResolvedValueOnce(createApiError('providerRejected'))
+      .mockResolvedValueOnce(buildTransaction())
+    const store = makeStore(startedCheckout())
+
+    const error = await store
+      .dispatch(payTransaction(args))
+      .unwrap()
+      .catch((e) => e)
+
+    // Generic payment-rejected state, no automatic retry of the charged call.
+    expect(error.kind).toBe('providerRejected')
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => String(path).endsWith('/payment')),
+    ).toHaveLength(1)
+
+    // A manual retry re-sends the same token; the server reconciles.
+    await store.dispatch(payTransaction(args)).unwrap()
+    expect(
+      mockedHttpRequest.mock.calls.filter(([path]) => String(path).endsWith('/payment')),
+    ).toHaveLength(2)
   })
 })
 

@@ -5,7 +5,7 @@ import type {
   TransactionStatus,
   TransactionView,
 } from '@/features/checkout/checkout.types'
-import { createApiError } from '@/shared/api/api.errors'
+import { createApiError, type ApiErrorKind } from '@/shared/api/api.errors'
 
 function buildTransaction(
   overrides: Partial<TransactionView> = {},
@@ -172,6 +172,29 @@ describe('PaymentStatus', () => {
     expect(alert).not.toHaveTextContent(/PAYMENT_PROVIDER_UNAVAILABLE/)
     expect(alert).not.toHaveTextContent('/transactions')
   })
+
+  it.each<[ApiErrorKind, RegExp]>([
+    ['network', /conectar/i],
+    ['providerUnavailable', /no está disponible/i],
+    ['providerRejected', /no fue aprobado/i],
+    ['rateLimited', /demasiadas solicitudes/i],
+    ['server', /error inesperado/i],
+    ['badRequest', /revisa los datos/i],
+  ])(
+    'shows its own safe Spanish copy and the retry action for the %s error',
+    async (kind, pattern) => {
+      const user = userEvent.setup()
+      const { onRetry } = renderStatus({ status: 'error', error: createApiError(kind) })
+
+      expect(
+        screen.getByRole('heading', { name: 'No pudimos confirmar el pago' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent(pattern)
+
+      await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }))
+      expect(onRetry).toHaveBeenCalledTimes(1)
+    },
+  )
 
   it('warns and shows the server total when the charge amount changed', () => {
     renderStatus({

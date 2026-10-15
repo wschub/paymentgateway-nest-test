@@ -79,4 +79,37 @@ describe('describePaymentError', () => {
   ])('maps %s to the %s next action', (kind, action) => {
     expect(describePaymentError(createApiError(kind))!.action).toBe(action)
   })
+
+  it.each(ALL_KINDS)(
+    'keeps the guidance for %s a plain serializable object (never an Error)',
+    (kind) => {
+      const guidance = describePaymentError(createApiError(kind))!
+
+      expect(guidance).not.toBeInstanceOf(Error)
+      expect(Object.keys(guidance).sort()).toEqual([
+        'action',
+        'actionLabel',
+        'kind',
+        'message',
+      ])
+      expect(JSON.parse(JSON.stringify(guidance))).toEqual(guidance)
+    },
+  )
+
+  it('maps rate limiting to its own copy with a manual retry only (no auto-retry hint)', () => {
+    const guidance = describePaymentError(createApiError('rateLimited'))!
+
+    expect(guidance.kind).toBe('rateLimited')
+    expect(guidance.message).toMatch(/demasiadas solicitudes/i)
+    expect(guidance.action).toBe('retry')
+    expect(guidance.actionLabel).toBe('Reintentar')
+  })
+
+  it('maps a service-unavailable failure to its own copy with a manual retry', () => {
+    const guidance = describePaymentError(createApiError('providerUnavailable'))!
+
+    expect(guidance.message).toMatch(/no está disponible/i)
+    expect(guidance.action).toBe('retry')
+    expect(guidance.actionLabel).toBe('Reintentar')
+  })
 })

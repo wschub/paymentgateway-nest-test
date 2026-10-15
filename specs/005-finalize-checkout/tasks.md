@@ -88,14 +88,14 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T017 [P] [US2] Extend per-code error-mapping tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: 409 (`soldOut`/`idempotencyConflict`/`notPayable`), 422 (`contractsNotAccepted`/`invalidToken` — no automatic retry of the same invalid payload), 429 (`rateLimited` — no immediate auto-retry), 502 `PAYMENT_PROVIDER_REJECTED` (`providerRejected` — payment-rejected state, generic Spanish copy, manual retry allowed), 503/network (`providerUnavailable`/`network` — retryable), and lock release in every case (FR-008, SC-004, US2.6)
-- [ ] T018 [P] [US2] Extend error-state rendering tests in `front-end/src/features/checkout/PaymentStatus.spec.tsx`: each error kind renders its distinct state with its specific retry/back action and generic Spanish copy — including the 502 `providerRejected` payment-rejected state with its manual-retry action (US2.1–US2.4, FR-008)
-- [ ] T019 [P] [US2] Extend copy/mapping tests in `front-end/src/features/checkout/payment-errors.spec.ts`: add guidance copy for the status-unavailable (polling timeout) and service-unavailable states, keeping errors serializable `{ kind, message }` (never `Error` instances) (US2.5; research R7)
+- [X] T017 [P] [US2] Extend per-code error-mapping tests in `front-end/src/features/checkout/checkout.thunks.spec.ts`: 409 (`soldOut`/`idempotencyConflict`/`notPayable`), 422 (`contractsNotAccepted`/`invalidToken` — no automatic retry of the same invalid payload), 429 (`rateLimited` — no immediate auto-retry), 502 `PAYMENT_PROVIDER_REJECTED` (`providerRejected` — payment-rejected state, generic Spanish copy, manual retry allowed), 503/network (`providerUnavailable`/`network` — retryable), and lock release in every case (FR-008, SC-004, US2.6)
+- [X] T018 [P] [US2] Extend error-state rendering tests in `front-end/src/features/checkout/PaymentStatus.spec.tsx`: each error kind renders its distinct state with its specific retry/back action and generic Spanish copy — including the 502 `providerRejected` payment-rejected state with its manual-retry action (US2.1–US2.4, FR-008)
+- [X] T019 [P] [US2] Extend copy/mapping tests in `front-end/src/features/checkout/payment-errors.spec.ts`: add guidance copy for the status-unavailable (polling timeout) and service-unavailable states, keeping errors serializable `{ kind, message }` (never `Error` instances) (US2.5; research R7)
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Implement any missing kind→state mapping or lock-release branch in `front-end/src/features/checkout/checkout.thunks.ts` and `front-end/src/features/checkout/checkout.slice.ts` (depends on T017)
-- [ ] T021 [US2] Implement any missing error-state UI in `front-end/src/features/checkout/PaymentStatus.tsx` and guidance copy for timeout/service-unavailable in `front-end/src/features/checkout/payment-errors.ts` (depends on T018, T019)
+- [X] T020 [US2] Implement any missing kind→state mapping or lock-release branch in `front-end/src/features/checkout/checkout.thunks.ts` and `front-end/src/features/checkout/checkout.slice.ts` (depends on T017)
+- [X] T021 [US2] Implement any missing error-state UI in `front-end/src/features/checkout/PaymentStatus.tsx` and guidance copy for timeout/service-unavailable in `front-end/src/features/checkout/payment-errors.ts` (depends on T018, T019)
 
 **Checkpoint**: User Stories 1 AND 2 work independently — every failure mode has a distinct state and a recovery action
 
