@@ -44,11 +44,11 @@ description: "Task list for Finalize Checkout — Summary, Payment, Final Status
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 [P] Verify `front-end/src/shared/api/http.ts` accepts 200/202 as success and maps 404/409/422/429/503/network/timeout to the typed `ApiError { kind, message }` kinds of `front-end/src/shared/api/api.errors.ts` (contracts/checkout-finalization.md §1, §3); no edit expected
-- [ ] T005 [P] Verify polling constants `STATUS_POLL_INTERVAL_MS = 2000` and `STATUS_POLL_CEILING_MS = 40000` in `front-end/src/shared/constants.ts` (R5); no edit expected
-- [ ] T006 [P] Verify `front-end/src/features/checkout/persistence.ts` writes the version-2 whitelist document (`version`, `savedAt`, `currentStep`, `selectedProductId`, `quantity`, `delivery`, `transactionId`, `idempotencyKey`) and discards on version ≠ 2 / invalid shape / staleness > 24 h (FR-009, FR-012; research R2); no edit expected
-- [ ] T007 [P] Verify `front-end/src/features/checkout/usePaymentPolling.ts` polls only while `transactionId && paymentStatus === 'pending' && currentStep === 'finalStatus'`, every 2 s, capped at 40 s, stopping on the first final status (FR-007, SC-003); no edit expected
-- [ ] T008 [P] Confirm `src/__tests__/eslint-restrictions.spec.ts` keeps `fetch` boxed in `front-end/src/shared/api/` and passes (constitution invariant)
+- [X] T004 [P] Verify `front-end/src/shared/api/http.ts` accepts 200/202 as success and maps 404/409/422/429/503/network/timeout to the typed `ApiError { kind, message }` kinds of `front-end/src/shared/api/api.errors.ts` (contracts/checkout-finalization.md §1, §3); no edit expected
+- [X] T005 [P] Verify polling constants `STATUS_POLL_INTERVAL_MS = 2000` and `STATUS_POLL_CEILING_MS = 40000` in `front-end/src/shared/constants.ts` (R5); no edit expected
+- [X] T006 [P] Verify `front-end/src/features/checkout/persistence.ts` writes the version-2 whitelist document (`version`, `savedAt`, `currentStep`, `selectedProductId`, `quantity`, `delivery`, `transactionId`, `idempotencyKey`) and discards on version ≠ 2 / invalid shape / staleness > 24 h (FR-009, FR-012; research R2); no edit expected
+- [X] T007 [P] Verify `front-end/src/features/checkout/usePaymentPolling.ts` polls only while `transactionId && paymentStatus === 'pending' && currentStep === 'finalStatus'`, every 2 s, capped at 40 s, stopping on the first final status (FR-007, SC-003); no edit expected
+- [X] T008 [P] Confirm `src/__tests__/eslint-restrictions.spec.ts` keeps `fetch` boxed in `front-end/src/shared/api/` and passes (constitution invariant)
 
 **Checkpoint**: Foundation verified — all 004 seams behave per contract; user story work can now begin
 
