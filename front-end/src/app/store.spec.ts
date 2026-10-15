@@ -186,6 +186,27 @@ describe('store persistence wiring', () => {
     })
   })
 
+  it('remaps a restored summary step to card entry in the production restore path (FR-014)', () => {
+    const { storage, seed } = createFakeStorage()
+    seed(
+      freshValidDoc({
+        currentStep: 'summary',
+        transactionId: 'tx-1',
+        idempotencyKey: 'Abcdefghijklmnop1234',
+      }),
+    )
+
+    const instance = createAppStore({ storage })
+
+    // The summary is never restored directly: the production startup docs
+    // remaps it to card entry before it reaches the store (never a stale
+    // summary flash) while keeping the recovery keys. Only makeStore's
+    // explicitly preloaded state is taken verbatim.
+    expect(instance.getState().checkout.currentStep).toBe('cardAndDelivery')
+    expect(instance.getState().checkout.transactionId).toBe('tx-1')
+    expect(instance.getState().checkout.idempotencyKey).toBe('Abcdefghijklmnop1234')
+  })
+
   it('prefers an explicit preloaded checkout over stored progress', () => {
     const { storage, seed } = createFakeStorage()
     seed(freshValidDoc())
